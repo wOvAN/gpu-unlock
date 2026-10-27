@@ -20,6 +20,8 @@ fedora)
 	dnf install -qy make gcc kernel-devel ;;
 almalinux|rocky|rhel|centos)
 	dnf install -qy make gcc kernel-devel elfutils-libelf-devel ;;
+opensuse*)
+	zypper -n install make gcc kernel-default-devel ;;
 arch)
 	pacman -Syu --noconfirm --needed make gcc linux-headers linux-lts-headers ;;
 void)
