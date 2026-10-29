@@ -307,7 +307,9 @@ int gu_falcon_loader(const struct gu_falcon_io *io, const struct gu_falcon_engin
 	ret = gu_falcon_reset(io, eng, evidence);
 	if (ret)
 		return ret;
-	if (falcon_read(io, eng->base + GU_FALCON_CPUCTL_OFFSET, &ctl) || inaccessible(ctl) || (ctl & 16) ||
+	/* TU10x GSP reads back HALTED after reset, as the HS path tolerates.
+	 * The WPR2 check after FWSEC proves the launch, not this bit. */
+	if (falcon_read(io, eng->base + GU_FALCON_CPUCTL_OFFSET, &ctl) || inaccessible(ctl) ||
 	    falcon_read(io, eng->base + GU_FALCON_HWCFG_OFFSET, &hwcfg) || inaccessible(hwcfg) ||
 	    falcon_read(io, eng->base + GU_FALCON_DMACTL_OFFSET, &trans) || inaccessible(trans))
 		return -ENODEV;
