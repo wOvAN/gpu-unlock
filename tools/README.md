@@ -24,3 +24,16 @@ The upstream module's [admission table](https://github.com/Zagitta/gpu-unlock/bl
 NVIDIA 595.112.07 [dispatches the newer bootstrap family separately](https://github.com/NVIDIA/open-gpu-kernel-modules/blob/d8257d95ae5fed364163e4df51db66df8b1ee0d2/src/nvidia/generated/g_kernel_gsp_nvoc.c#L779-L805). Linux's [FSP documentation](https://www.kernel.org/doc/html/v7.3-rc7/gpu/nova/core/fsp.html) explains the difference: Hopper/Blackwell uses FSP to authenticate FMC, which loads GSP-RM, rather than the SEC2 Booter chain used by Ampere. A missing `BooterLoadUcode` HAL variant is therefore not evidence of a hidden Blackwell SEC2 booter waiting to be extracted.
 
 Changing a PCI ID, CPU page size or installed driver version does not supply the missing Blackwell firmware path. No Blackwell speed change or performance gain has been measured by this fork.
+
+# Square GEMM rate benchmark
+
+`bench_gemm.c` measures. It runs one square half-precision GEMM through cuBLAS on every device you name, times each launch with CUDA events, and prints the best of them with the device's PCI bus id, so a line can be matched to a card. It needs the CUDA toolkit to build and a working driver to run; a driver alone is not enough.
+
+```sh
+gcc -O2 tools/bench_gemm.c -o bench_gemm -lcublas -lcudart
+./bench_gemm 0 8192 30 bf16
+./bench_gemm 0 8192 30 fp16
+```
+
+It is the A/B instrument for the unlock, so compare a card only with itself: lock the clocks (`nvidia-smi -lgc 1500,1500`, released afterwards with `-rgc`), run it, power the card off, unlock it with `gpu_unlock.targets=` on the kernel command line, and run it again. A number from one card, clock, power limit or temperature says nothing about another.
+
