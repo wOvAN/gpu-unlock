@@ -160,6 +160,12 @@ static int descriptor(const u8 *rom, size_t length, u64 off,
 		fw.data_off = r32(rom + off + 40);
 		fw.dmem_pa = r32(rom + off + 44);
 		fw.dmem_size = r32(rom + off + 48);
+		/* The loader DMAs this segment with the same engine, so it has to
+		 * be a multiple of 256 for the same reason as below.
+		 */
+		if (fw.dmem_size > ~(u32)0 - 255)
+			return GU_DIAG(-EINVAL);
+		fw.dmem_size = (fw.dmem_size + 255) & ~255u;
 		code_size_aligned = (fw.imem_size + 255) & ~255u;
 		data_size_aligned = (fw.dmem_size + 255) & ~255u;
 		if (!fw.imem_size || !fw.dmem_size ||
@@ -193,6 +199,16 @@ static int descriptor(const u8 *rom, size_t length, u64 off,
 	fw.imem_va = r32(rom + off + 24);
 	fw.dmem_pa = r32(rom + off + 28);
 	fw.dmem_size = r32(rom + off + 32);
+	/* The falcon DMA engine moves 256-byte units and falcon_dma_valid()
+	 * rejects a size that is not a multiple of 256. Some GA106 boards
+	 * (RTX 3060 0x2544) describe a DMEM segment of 0x980, which is not,
+	 * so round it up exactly as image_size above is rounded. data_off +
+	 * the rounded size stays within the rounded image_size, and the ROM
+	 * bytes it covers are already in the copied image.
+	 */
+	if (fw.dmem_size > ~(u32)0 - 255)
+		return GU_DIAG(-EINVAL);
+	fw.dmem_size = (fw.dmem_size + 255) & ~255u;
 	fw.data_off = fw.imem_size;
 	fw.engine_mask = r16(rom + off + 36);
 	fw.ucode_id = rom[off + 38];

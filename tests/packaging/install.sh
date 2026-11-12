@@ -6,13 +6,16 @@ set -eu
 version=$(cat VERSION)
 src=/usr/src/gpu-unlock-$version
 fw=/usr/lib/firmware/gpu-unlock/610.43.03
-dracut=/usr/lib/dracut/dracut.conf.d/gpu-unlock.conf
+dracut=/usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
 . /etc/os-release
 case "$ID" in
 debian|ubuntu)
 	install="apt-get install -qy --no-install-recommends ./build/deb/*.deb"
 	remove="apt-get purge -qy"
-	boot=/usr/share/initramfs-tools/scripts/init-top/gpu-unlock ;;
+	boot=/usr/share/initramfs-tools/scripts/init-top/gpu-unlock
+	# Ubuntu 26.04 ships a dracut initrd and no mkinitramfs, so the deb has
+	# to rebuild the images on its own there.
+	test -x /usr/bin/dracut -o -x /bin/dracut && boot=$dracut ;;
 fedora)
 	install="dnf install -qy build/rpm/RPMS/noarch/*.rpm"
 	remove="dnf remove -qy"

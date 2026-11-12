@@ -58,7 +58,7 @@ make DESTDIR=%{buildroot} ASSETS="$PWD/assets" \
 %license licenses/GPL-2.0.txt licenses/CMP40HX-MIT.txt licenses/NVIDIA-MIT.txt
 %doc %{_docdir}/gpu-unlock
 %{_usrsrc}/gpu-unlock-%{version}
-%{_prefix}/lib/dracut/dracut.conf.d/gpu-unlock.conf
+%{_prefix}/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
 
 %files firmware
 %defattr(0644,root,root,0755)

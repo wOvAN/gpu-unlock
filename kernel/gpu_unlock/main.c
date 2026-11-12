@@ -7,9 +7,39 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 #include <linux/suspend.h>
+#include <linux/version.h>
 
 #include "unlock_610.h"
 #include "recipes.h"
+
+/* pci_dev_lock() is only exported from 5.16. Older trees need the two locks it
+ * takes, in the same order: config access stopped, then the device lock, which
+ * is what the transaction holds across the whole unlock. Ubuntu exports it in
+ * its own 5.15, which is why the 5.15 build in CI never showed this.
+ */
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)
+static void gu_pci_dev_lock(struct pci_dev *pdev)
+{
+	pci_cfg_access_lock(pdev);
+	device_lock(&pdev->dev);
+}
+
+static void gu_pci_dev_unlock(struct pci_dev *pdev)
+{
+	device_unlock(&pdev->dev);
+	pci_cfg_access_unlock(pdev);
+}
+#else
+static void gu_pci_dev_lock(struct pci_dev *pdev)
+{
+	pci_dev_lock(pdev);
+}
+
+static void gu_pci_dev_unlock(struct pci_dev *pdev)
+{
+	pci_dev_unlock(pdev);
+}
+#endif
 
 static char *targets;
 module_param(targets, charp, 0444);
@@ -54,9 +84,9 @@ static void unlock_one(void *data, async_cookie_t cookie)
 	struct pci_dev *pdev = card->device.pdev;
 	int ret;
 
-	pci_dev_lock(pdev);
+	gu_pci_dev_lock(pdev);
 	ret = pdev->driver ? -EBUSY : gpu_unlock_610_unlock(&card->device, &shared, false, direct);
-	pci_dev_unlock(pdev);
+	gu_pci_dev_unlock(pdev);
 	if (ret)
 		pci_err(pdev, "gpu_unlock: unlock failed (%d)\n", ret);
 	else
@@ -73,11 +103,11 @@ static void unlock_again(void *data, async_cookie_t cookie)
 	bool nvidia;
 	int ret = 0;
 
-	pci_dev_lock(pdev);
+	gu_pci_dev_lock(pdev);
 	nvidia = pdev->driver && !strcmp(pdev->driver->name, "nvidia");
 	if (nvidia)
 		ret = gpu_unlock_610_unlock(&card->device, &shared, true, direct);
-	pci_dev_unlock(pdev);
+	gu_pci_dev_unlock(pdev);
 	if (!nvidia)
 		pci_info(pdev, "gpu_unlock: not bound to nvidia, left as is after resume\n");
 	else if (ret == -EALREADY)

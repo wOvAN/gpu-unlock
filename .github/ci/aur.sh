@@ -9,7 +9,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 # A separate directory ensures the full checkout cannot mask missing AUR files.
 install -m644 packaging/aur/PKGBUILD packaging/aur/.SRCINFO \
     packaging/aur/gpu-unlock.install "$work/"
-useradd -m builder
+id -u builder >/dev/null 2>&1 || useradd -m builder
 chown -R builder "$work"
 runuser -u builder -- bash -euc '
     cd "$1"
@@ -27,7 +27,7 @@ test -n "$version"
 test -f "/usr/src/gpu-unlock-$version/dkms.conf"
 test -f "/usr/src/gpu-unlock-$version/main.c"
 test -f /etc/mkinitcpio.conf.d/zz-gpu-unlock.conf
-test -f /usr/lib/dracut/dracut.conf.d/gpu-unlock.conf
+test -f /usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
 test -f /usr/lib/firmware/gpu-unlock/*/gsp_ga10x.bin
 test -f /usr/lib/firmware/gpu-unlock/*/booter_load_ga102.bin
 test -s /usr/share/licenses/gpu-unlock-firmware/NVIDIA-LICENSE
@@ -50,7 +50,7 @@ pacman -Rns --noconfirm gpu-unlock-dkms gpu-unlock-firmware
 test ! -e "/usr/src/gpu-unlock-$version"
 test ! -e /usr/lib/firmware/gpu-unlock
 test ! -e /etc/mkinitcpio.conf.d/zz-gpu-unlock.conf
-test ! -e /usr/lib/dracut/dracut.conf.d/gpu-unlock.conf
+test ! -e /usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
 for build in /usr/lib/modules/*/build; do
     test -f "$build/Makefile" || continue
     kernel=${build%/build}
