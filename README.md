@@ -185,7 +185,7 @@ Images are rebuilt on install. mkinitcpio ignores drop-ins for an image
 built with `-c <config>` or a preset `_config`; put `gpu_unlock` right
 before `nvidia` in that config's `MODULES` yourself.
 - **initramfs-tools:** `/usr/share/initramfs-tools/modules.d/gpu-unlock.conf`.
-- **dracut:** `/usr/lib/dracut/dracut.conf.d/gpu-unlock.conf`.
+- **dracut:** `/usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf`.
 
 With initramfs-tools and dracut, the module is built for every installed
 kernel that has headers, and those kernels' images are rebuilt on install

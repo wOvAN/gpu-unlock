@@ -8,3 +8,12 @@ set -e
 if [ "$1" = remove ] && command -v update-initramfs >/dev/null; then
 	update-initramfs -u -k all
 fi
+# The same on a dracut image: rebuild every one that still loads the
+# module, now that the drop-in that forced it is gone.
+if [ "$1" = remove ] && command -v lsinitrd >/dev/null; then
+	for d in /lib/modules/*/; do
+		k=${d%/}; k=${k##*/}
+		lsinitrd --kver "$k" 2>/dev/null | grep -q gpu_unlock &&
+			dracut --force --kver "$k" || :
+	done
+fi

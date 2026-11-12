@@ -9,3 +9,13 @@ set -e
 if [ "$1" = configure ] && command -v update-initramfs >/dev/null; then
 	update-initramfs -u -k all
 fi
+# Ubuntu 26.04 ships a dracut initrd and no mkinitramfs, and its dkms does
+# not know to regenerate it, so rebuilding the images is on us there. The
+# same rule as the RPM spec: the kernels that can load the module.
+if [ "$1" = configure ] && command -v dracut >/dev/null; then
+	for d in /lib/modules/*/; do
+		k=${d%/}; k=${k##*/}
+		modinfo -k "$k" gpu_unlock >/dev/null 2>&1 &&
+			dracut --force --kver "$k" || :
+	done
+fi
