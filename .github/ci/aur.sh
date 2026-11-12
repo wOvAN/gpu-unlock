@@ -9,7 +9,7 @@ trap 'rm -rf "$work"' EXIT HUP INT TERM
 # A separate directory ensures the full checkout cannot mask missing AUR files.
 install -m644 packaging/aur/PKGBUILD packaging/aur/.SRCINFO \
     packaging/aur/gpu-unlock.install "$work/"
-useradd -m builder
+id -u builder >/dev/null 2>&1 || useradd -m builder
 chown -R builder "$work"
 runuser -u builder -- bash -euc '
     cd "$1"
