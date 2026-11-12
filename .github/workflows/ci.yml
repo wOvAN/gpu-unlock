@@ -54,6 +54,8 @@ jobs:
             setup: dnf install -qy git
           - image: fedora:latest  # 7.2
             setup: dnf install -qy git
+          - image: almalinux:9   # 5.14, the oldest kernel we build for
+            setup: dnf install -qy git
           - image: archlinux:latest  # 7.2, 6.18 LTS
             setup: pacman -Syu --noconfirm --needed git
     steps:
