@@ -32,8 +32,11 @@ jobs:
     timeout-minutes: 30
     steps:
       # Install git before checkout; GitHub archives omit .github via export-ignore.
+      # linux, not only linux-headers: installing the dkms package runs DKMS's
+      # pacman hook, and the hook refuses to build a module for a kernel whose
+      # modules tree the image does not carry.
       - name: Install build dependencies
-        run: pacman -Syu --noconfirm --needed base-devel git python zstd dkms linux-headers
+        run: pacman -Syu --noconfirm --needed base-devel git python zstd dkms linux linux-headers
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
           persist-credentials: false
