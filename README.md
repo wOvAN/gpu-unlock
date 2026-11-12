@@ -103,6 +103,10 @@ existing options:
   ```sh
   sudo grub-mkconfig -o /boot/grub/grub.cfg
   ```
+- **Proxmox VE (host):** add `gpu_unlock.targets=all` inside `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, then run
+  ```sh
+  sudo update-grub && sudo proxmox-boot-tool refresh
+  ```
 - **Fedora / RHEL:** run
   ```sh
   sudo grubby --update-kernel=ALL --args="gpu_unlock.targets=all"
@@ -127,6 +131,10 @@ A: I don't run windows and don't plan to maintain it but two ports exist, YMMV:
 [https://github.com/physicsdolphin/nv-uefi-unlocker](https://github.com/physicsdolphin/nv-uefi-unlocker) (Turing / Ampere / Ada, bootable USB UEFI app).   
 The latter runs before the driver binds from a one-shot USB boot - no resident boot entry, no NVRAM changes, no installer; firmware is never bundled, it is regenerated locally from the pinned public inputs (same 610.43.03 pipeline), and Turing needs the GSP firmware mode switch. Real-machine verified matrix and logs: [docs/compatibility.md](https://github.com/physicsdolphin/nv-uefi-unlocker/blob/main/docs/compatibility.md).   
 There are windows installer's floating around but I would recommend being ++**very**++ careful with those.
+- Q: My GPU is passed through to a VM, where do I install this?  
+A: On the hypervisor host, and only there. The module runs from the host initramfs before `nvidia` binds, and the unlock lives until the card loses power, so every guest that gets the card later is already unlocked and needs nothing at all: no package, no kernel parameter, stock driver as usual. Measured on a Proxmox VE host with RTX 4060 Ti passed through, the guests bench identically with the module on the host and with the module inside the guest.   
+- Q: Can I run it inside the VM instead?  
+A: With PCI passthrough it does work, VFIO exposes everything the module needs (BAR0, FLR, DMA above 4 GiB), at three costs: the guest carries the 108 MB firmware package and builds the module through DKMS, the guest inherits the mode the host used, and the guest can never reach the stock rate again, because a guest reboot, an FLR and a `vfio-pci` rebind all keep the unlock. Only a host power off restores stock, which is what you want for a stock vs unlocked comparison. Suspend and resume is a host job too: the module re-unlocks there through its PM notifier.
 - Q: What about Blackwell (RTX 50)?  
 A: Not supported and unlikely to happen.    
 - Q: Why did Nvidia handicap my GPU?  
