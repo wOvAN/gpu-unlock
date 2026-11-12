@@ -113,6 +113,7 @@ existing options:
 your boot images/entries (e.g. `sudo mkinitcpio -P` for mkinitcpio UKIs).
 - **Limine:** append `gpu_unlock.targets=all` to cmdline in `/boot/limine/limine.conf`.
 - **rEFInd:** append `gpu_unlock.targets=all` to "Boot using default options" in `/boot/refind_linux.conf`.
+- **Omarchy:** add `gpu_unlock.targets=all` inside `KERNEL_CMDLINE[default]` in `/etc/default/limine`, then run `sudo limine-update`.
 
 # FAQ
 
