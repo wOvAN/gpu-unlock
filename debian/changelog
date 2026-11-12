@@ -1,3 +1,15 @@
+gpu-unlock (2.1.0) UNRELEASED; urgency=medium
+
+  * Add GA107 and the reported GA106 and AD106 laptop SKUs.
+  * Pad Booter DMEM sizes to the Falcon DMA granularity.
+  * Build on kernels older than 5.16, which have no pci_dev_lock().
+  * Rebuild dracut initramfs images when installing the deb package, and
+    load gpu_unlock ahead of nvidia by naming the dracut drop-in
+    00-gpu-unlock.conf.
+  * Add tools/bench_gemm.c.
+
+ -- Zagitta <zetlon+github@gmail.com>  Thu, 12 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.0.0) UNRELEASED; urgency=medium
 
   * Add Turing and Ada Lovelace support.

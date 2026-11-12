@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.0.0
+Version: 2.1.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -129,6 +129,15 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Thu Nov 12 2026 Zagitta <zetlon+github@gmail.com> - 2.1.0-1
+- Add GA107 and the reported GA106 and AD106 laptop SKUs.
+- Pad Booter DMEM sizes to the Falcon DMA granularity.
+- Build on kernels older than 5.16, which have no pci_dev_lock().
+- Rebuild dracut initramfs images on Debian and Ubuntu too, and load
+  gpu_unlock ahead of nvidia by naming the dracut drop-in
+  00-gpu-unlock.conf.
+- Add tools/bench_gemm.c.
+
 * Tue Oct 27 2026 Zagitta <zetlon+github@gmail.com> - 2.0.0-1
 - Add Turing and Ada Lovelace support.
 
