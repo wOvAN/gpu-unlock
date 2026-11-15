@@ -12,7 +12,13 @@ case "$ID" in
 debian|ubuntu)
 	install="apt-get install -qy --no-install-recommends ./build/deb/*.deb"
 	remove="apt-get purge -qy"
-	boot=/usr/share/initramfs-tools/scripts/init-top/gpu-unlock
+	# The hook is what keeps nvidia out of the image's modprobe.d and the
+	# init-premount script is what loads it after gpu_unlock, so the deb has
+	# to ship all three drop-ins; asserting only init-top passes without
+	# them.
+	boot="/usr/share/initramfs-tools/hooks/gpu-unlock
+	      /usr/share/initramfs-tools/scripts/init-top/gpu-unlock
+	      /usr/share/initramfs-tools/scripts/init-premount/gpu-unlock"
 	# Ubuntu 26.04 ships a dracut initrd and no mkinitramfs, so the deb has
 	# to rebuild the images on its own there.
 	test -x /usr/bin/dracut -o -x /bin/dracut && boot=$dracut ;;
@@ -35,11 +41,15 @@ test -f "$src/main.c"
 test -f "$fw/gsp_ga10x.bin"
 test -f "$fw/booter_load_ga102.bin"
 test -f "$dracut"
-test -f "$boot"
+for dropin in $boot; do
+	test -f "$dropin"
+done
 
 $remove gpu-unlock-dkms gpu-unlock-firmware
 test ! -e "$src"
 test ! -e "$fw"
 test ! -e "$dracut"
-test ! -e "$boot"
+for dropin in $boot; do
+	test ! -e "$dropin"
+done
 echo "packages install and remove cleanly"
