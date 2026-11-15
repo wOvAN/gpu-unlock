@@ -14,6 +14,7 @@
 #include "../kernel/gpu_unlock/payload.h"
 #include "../kernel/gpu_unlock/prep_610.h"
 #include "../kernel/gpu_unlock/recipes.h"
+#include "../kernel/gpu_unlock/registers.h"
 
 /* The bundle magic of the generated Booter files; BOOTER_MAGIC lives in the
  * kernel-only firmware_610.c. */
@@ -100,6 +101,58 @@ static void test_layout_and_prep(void)
 	assert(gpu_unlock_fuse_version(0) == 0);
 	assert(gpu_unlock_fuse_version(1) == 1);
 	assert(gpu_unlock_fuse_version(7) == 3);
+}
+
+/* TU10x is the family whose table is shorter than its payload's slots, so its
+ * last batch is padded by repeating the last write: the table has to end on a
+ * store a padded launch can safely reapply. Pin the whole shape, including the
+ * table order, so a reordering that ends on the FEAT PLM write (which a padded
+ * launch would reopen on the next card of a batch) fails here instead of on
+ * hardware, and pin the Booter geometry the payload's gadget offsets were
+ * derived against.
+ */
+static void test_turing_two_write(void)
+{
+	const struct gu_card *card = gu_card_find(0x1e84); /* RTX 2070 SUPER */
+	const struct gu_family *family;
+	const struct gu_payload *p;
+	const struct gu_reg_write *plm;
+	struct gu_reg_write batch[GU_PAYLOAD_MAX_WRITES];
+	size_t i;
+	u8 *buf;
+
+	assert(card != NULL);
+	family = card->family;
+	assert(strcmp(family->name, "TU102/TU104/TU106") == 0);
+	p = family->booter->payload;
+	assert(strcmp(p->name, "tu102-v67-2w") == 0);
+	assert(p->writes == 2);
+	assert(p->completion == GU_PAYLOAD_HALT_RESET_PLM_ZERO);
+	assert(family->booter->expect.image_size == 59136);
+	assert(family->booter->expect.num_sigs == 1);
+	assert(family->booter->expect.sig_bytes == 16);
+	assert(family->booter->expect.ucode_id == 13);
+
+	plm = family->privileged.entries;
+	assert(family->privileged.count == 2);
+	assert(plm[0].addr == GU_TU102_FEAT_PLM_OFFSET && plm[0].value == 0xffffffff);
+	assert(plm[1].addr == GU_WPR2_ADDR_HI_OFFSET && plm[1].value == 0);
+	assert(family->host.count == 2);
+	assert(family->host.entries[0].addr == GU_TU102_FEAT_SS0_OFFSET);
+	assert(family->host.entries[0].value == GU_SS0_UNLOCK);
+	assert(family->host.entries[1].addr == GU_TU102_FEAT_SS1_OFFSET);
+	assert(family->host.entries[1].value == GU_SS1_UNLOCK);
+
+	for (i = 0; i < family->privileged.count; i++)
+		batch[i] = plm[i];
+	buf = calloc(1, p->size);
+	assert(buf != NULL);
+	assert(gu_payload_build(p, buf, batch, family->privileged.count) == 0);
+	for (i = family->privileged.count; i < p->writes; i++) {
+		assert(rd32_le(buf + p->slots[i].address_off) == plm[1].addr);
+		assert(rd32_le(buf + p->slots[i].value_off) == plm[1].value);
+	}
+	free(buf);
 }
 
 static void test_recipes_and_payloads(void)
@@ -267,6 +320,7 @@ int main(int argc, char **argv)
 	test_gfw_eval();
 	test_layout_and_prep();
 	test_recipes_and_payloads();
+	test_turing_two_write();
 	if (argc > 1)
 		test_extracted_assets(argv[1]);
 	printf("unit_test: all checks passed\n");
