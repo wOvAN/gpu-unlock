@@ -32,9 +32,9 @@ jobs:
       - name: Verify the inputs
         run: python3 firmware/fetch_artifacts.py --offline .inputs
 
-  # The parsers and the recipe table compile for userspace too, so their host
-  # tests run on the runner's own gcc, against the same generated firmware the
-  # module requests at run time.
+  # The parsers, the recipe table and the firmware extractors compile and run
+  # for userspace, so their host tests run on the runner's own gcc and python,
+  # against the same generated firmware the module requests at run time.
   unit:
     name: unit tests
     runs-on: ubuntu-24.04
@@ -54,6 +54,11 @@ jobs:
           sudo apt-get install -qy --no-install-recommends zstd
       - run: make firmware INPUTS=.inputs ASSETS=.assets
       - run: make test-unit ASSETS=.assets
+      - name: Run the python tests
+        run: |
+          python3 tests/firmware/test_extract_boot_assets.py
+          python3 tests/packaging/test_aur_publish.py
+          python3 -m unittest discover -s tests -p 'test_sm_rates.py'
 
   module:
     name: module (${{ matrix.image }})
