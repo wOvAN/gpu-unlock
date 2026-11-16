@@ -8,7 +8,7 @@ in [`package.nix`](package.nix).
 Add the input to your system flake:
 
 ```nix
-inputs.gpu-unlock.url = "github:Zagitta/gpu-unlock";
+inputs.gpu-unlock.url = "github:wOvAN/gpu-unlock";
 inputs.gpu-unlock.inputs.nixpkgs.follows = "nixpkgs";
 ```
 

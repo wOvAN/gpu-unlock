@@ -3,8 +3,8 @@
 #
 # Build gpu_unlock for the booted kernel, package it with its firmware as a
 # local RPM and layer it on an rpm-ostree system (Silverblue, Kinoite,
-# Bazzite). See "docs/Fedora Atomic and Secure Boot.md" for the manual steps
-# this follows.
+# Bazzite), signing the module with a MOK key when Secure Boot is on. See
+# guix/integration.md for the same pre-driver ordering on a non-rpm distro.
 set -euo pipefail
 
 usage() {
