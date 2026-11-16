@@ -51,7 +51,7 @@
     (file-name (git-file-name "gpu-unlock" %gpu-unlock-version))
     (sha256
      (base32
-      "57vg2lws7fddpezhg7abnyti633omewgblmzj3d7vulwo2ypzpfq"))))
+      "gxv2v7rodmcxdzrocb3bzgafx7z2hsfchrq3pzg4pvdbtr7oj2ja"))))
 
 (define nvidia-kernel-source-610.43.03
   (origin
