@@ -54,7 +54,7 @@ jobs:
           EXPECTED_AUR_COMMIT: ${{ inputs.expected_aur_commit }}
         run: |
           set -euo pipefail
-          : "${AUR_SSH_PRIVATE_KEY:?Configure the aur environment's SSH key}"
+          : "${AUR_SSH_PRIVATE_KEY:?Configure the SSH key of the aur environment}"
           : "${AUR_KNOWN_HOSTS:?Configure verified AUR host keys}"
           umask 077
           ssh_dir=$(mktemp -d "$RUNNER_TEMP/aur-ssh.XXXXXX")

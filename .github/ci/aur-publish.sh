@@ -3,8 +3,8 @@
 # Publish already validated files. Never execute PKGBUILD with AUR credentials.
 set -euo pipefail
 
-: "${AUR_GIT_NAME:?Set the accepting maintainer's Git name}"
-: "${AUR_GIT_EMAIL:?Set the accepting maintainer's Git email}"
+: "${AUR_GIT_NAME:?Set the Git name of the accepting maintainer}"
+: "${AUR_GIT_EMAIL:?Set the Git email of the accepting maintainer}"
 : "${EXPECTED_AUR_COMMIT:?Set the reviewed AUR commit, or empty for first publication}"
 if [[ $EXPECTED_AUR_COMMIT != empty && ! $EXPECTED_AUR_COMMIT =~ ^[0-9a-f]{40}$ ]]; then
     echo 'EXPECTED_AUR_COMMIT must be a full commit SHA or empty' >&2
