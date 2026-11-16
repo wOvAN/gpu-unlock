@@ -36,8 +36,8 @@
             gpu-unlock-source
             %gpu-unlock-version))
 
-(define %gpu-unlock-version "2.2.0")
-(define %gpu-unlock-commit "v2.2.0")
+(define %gpu-unlock-version "2.3.0")
+(define %gpu-unlock-commit "v2.3.0")
 
 ; The 2.2 release exists only on the fork that carries the Turing unlock, so
 ; the port follows its tags. The checkout hash below is the bootstrap

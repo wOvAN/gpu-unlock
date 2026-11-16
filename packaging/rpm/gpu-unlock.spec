@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.2.0
+Version: 2.3.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -134,6 +134,17 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Mon Nov 16 2026 Zagitta <zetlon+github@gmail.com> - 2.3.0-1
+- Add a packager-free build and install path (make install-local) for
+  distros with no native packager.
+- Add TrueNAS SCALE, Guix System, rpm-ostree and NixOS support, and
+  openSUSE packaging.
+- Contain a late unlock failure with the success path's FLR, so a Booter
+  that halts after the privileged writes leaves the card re-unlockable at
+  the next boot instead of held until power off.
+- Accept the NvU64-word bindata codegen of the newer NVIDIA source trees.
+- Name the modules to dracut when rebuilding on install.
+
 * Mon Nov 16 2026 Zagitta <zetlon+github@gmail.com> - 2.2.0-1
 - Unlock Turing (TU102, TU104 and TU106) with the two-write chain: the
   Booter opens WPR_CFG_PLM and then the FEAT aperture, and the GSP launch

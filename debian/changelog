@@ -1,3 +1,23 @@
+gpu-unlock (2.3.0) UNRELEASED; urgency=medium
+
+  * Add a packager-free build and install path: make install-local builds
+    the module through DKMS and places its firmware, the licenses and the
+    initramfs drop-ins by hand, for distros with no native packager.
+  * Add TrueNAS SCALE support: a prebuilt module bundle with an on-box
+    firmware generator, a Guix System port with a native module package and
+    a boot-time shepherd one-shot, an install script for rpm-ostree
+    systems, a reusable Nix flake with an opt-in NixOS module, and
+    openSUSE packaging.
+  * Contain a late unlock failure with the success path's FLR, so a Booter
+    that halts after the privileged writes leaves the card reset and
+    re-unlockable at the next boot instead of held until power off.
+  * Accept the NvU64-word bindata codegen, so the boot assets extract from
+    the newer NVIDIA source trees.
+  * Name the modules to dracut when rebuilding on install, so the module
+    lands in the image on deb and rpm installs.
+
+ -- Zagitta <zetlon+github@gmail.com>  Mon, 16 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.2.0) UNRELEASED; urgency=medium
 
   * Unlock Turing (TU102, TU104 and TU106) with the two-write chain: the
