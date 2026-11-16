@@ -47,14 +47,24 @@ jobs:
         with:
           persist-credentials: false
       - run: apt-get install -qy --no-install-recommends linux-headers-amd64
-      - name: Pack the headers as host-diagnostics.sh does
+      - name: Pack self-contained kernel headers
         run: |
           set -eu
           k=$(ls -d /lib/modules/*/build | head -n1)
           k=${k%/build}; k=${k##*/}
           echo "kernel: $k"
-          # Dereferenced real files, exactly as the host script sends them.
-          tar -C "$(realpath "/lib/modules/$k/build")" -chzf kernel-headers.tar.gz .
+          # Debian splits the headers: the flavour tree's Makefile includes the
+          # common tree's by absolute path, which a real host has unpacked and
+          # this container has not. Merge the two, so the tarball is the
+          # self-contained tree a host's /lib/modules/*/build really is.
+          arch=$(realpath "/lib/modules/$k/build")
+          common=${arch%-*}-common
+          test -d "$common" || { echo "no common headers beside $arch" >&2; exit 1; }
+          rm -rf merged && mkdir merged
+          # Dereferenced real files, as the host tarball carries them.
+          cp -aL "$common"/. "$arch"/. merged/
+          tar -C merged -chzf kernel-headers.tar.gz .
+          tar -tzf kernel-headers.tar.gz | grep -qE '(^|/)Makefile$'
           tar -tzf kernel-headers.tar.gz |
             grep -qE '(^|/)include/config/auto\.conf$'
       - uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0

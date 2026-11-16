@@ -77,11 +77,13 @@ jobs:
           # shallow clone cannot be cloned --shared.
           fetch-depth: 0
           persist-credentials: false
+      # The cache is a saving, not a requirement: inside a container job it is
+      # not always readable, and the test installs python3 and fetches what is
+      # missing here itself.
       - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: .inputs
           key: inputs-${{ hashFiles('firmware/fetch_artifacts.py') }}
-          fail-on-cache-miss: true
       - name: Install, verify, remove
         env:
           SRC: ${{ github.workspace }}
