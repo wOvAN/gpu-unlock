@@ -63,6 +63,11 @@ jobs:
           rm -rf merged && mkdir merged
           # Dereferenced real files, as the host tarball carries them.
           cp -aL "$common"/. "$arch"/. merged/
+          # The flavour tree's Makefile is a stub that includes the common
+          # tree's Makefile by absolute path, so the merged tree keeps the
+          # common tree's own; that is what makes the tarball self-contained.
+          cp -aL "$common"/Makefile merged/Makefile
+          ! grep -q '^include /usr/src' merged/Makefile
           tar -C merged -chzf kernel-headers.tar.gz .
           tar -tzf kernel-headers.tar.gz | grep -qE '(^|/)Makefile$'
           tar -tzf kernel-headers.tar.gz |

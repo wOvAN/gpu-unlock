@@ -71,6 +71,11 @@ jobs:
     container: debian:13
     needs: inputs
     steps:
+      # git before the checkout, as in the module and package jobs: without it
+      # the checkout is a GitHub archive, which leaves out tests/. zstd before
+      # the cache restore, which needs it.
+      - run: apt-get update -q &&
+          apt-get install -qy --no-install-recommends ca-certificates git tar zstd
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           # The test clones this checkout to install a clean copy, and a
