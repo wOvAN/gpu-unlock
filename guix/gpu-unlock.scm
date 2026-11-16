@@ -36,8 +36,8 @@
             gpu-unlock-source
             %gpu-unlock-version))
 
-(define %gpu-unlock-version "2.3.0")
-(define %gpu-unlock-commit "v2.3.0")
+(define %gpu-unlock-version "2.4.0")
+(define %gpu-unlock-commit "v2.4.0")
 
 ; The 2.x releases exist only on the fork that carries the Turing unlock, so
 ; the port follows its tags. The checkout hash below is the nar hash of the

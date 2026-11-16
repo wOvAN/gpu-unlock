@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.3.0
+Version: 2.4.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -134,6 +134,19 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Tue Nov 17 2026 Zagitta <zetlon+github@gmail.com> - 2.4.0-1
+- Prepare the Booter and the Falcon loader of every selected card, not of
+  every firmware bundle, so a family that shares another family's GSP boot
+  gets its own Booter image in a mixed round.
+- Derive the TU116 Booter, payload and family from the TU116 bindata of the
+  pinned driver, and ship booter_load_tu116.bin. The die gets no card id:
+  with its own Booter the transaction completes and the stock driver then
+  refuses the card, so it is material only, as GA100 is.
+- Make the TrueNAS kernel-headers gate's assertion fail the job; a pipeline
+  beginning with ! is exempt from errexit, so it never could.
+- Drop the apostrophes from the AUR publish prompts; bash parsed them as
+  quotes inside ${VAR:?...} and left the script unparseable.
+
 * Mon Nov 16 2026 Zagitta <zetlon+github@gmail.com> - 2.3.0-1
 - Add a packager-free build and install path (make install-local) for
   distros with no native packager.

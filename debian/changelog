@@ -1,3 +1,26 @@
+gpu-unlock (2.4.0) UNRELEASED; urgency=medium
+
+  * Prepare the Booter and the Falcon loader of every selected card, not of
+    every firmware bundle: a bundle is keyed by the firmware description, and
+    a family can share one, so TU116 next to a TU104 card in the same round
+    got the TU102 assets and no Booter image of its own.
+  * Derive the TU116 Booter image, its payload and the TU116 family from the
+    TU116 bindata of the pinned driver: extract booter_load_tu116.bin,
+    MODULE_FIRMWARE() it, and pin its geometry in the host test. The die
+    gets no id in the card table: with the TU10x image its Booter stalls in
+    the nonsecure stub, and with its own the whole transaction completes and
+    the stock driver then refuses the card ("unexpected WPR2 already up,
+    cannot proceed with booting GSP"), so the material is present and the
+    card is not, as for GA100.
+  * Make the TrueNAS kernel-headers gate assert with a test that exits
+    non-zero itself; a pipeline beginning with ! is exempt from errexit, so
+    the check there could never fail the job.
+  * Drop the apostrophes from the AUR publish prompts. Bash parsed them as
+    quotes inside the ${VAR:?...} defaults and left the publish script
+    unparseable.
+
+ -- Zagitta <zetlon+github@gmail.com>  Tue, 17 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.3.0) UNRELEASED; urgency=medium
 
   * Add a packager-free build and install path: make install-local builds

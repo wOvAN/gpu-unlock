@@ -247,4 +247,4 @@ module_init(gpu_unlock_init);
 module_exit(gpu_unlock_exit);
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Turing, Ampere and Ada pre-driver tensor core unlock");
-MODULE_VERSION("2.3.0");
+MODULE_VERSION("2.4.0");
