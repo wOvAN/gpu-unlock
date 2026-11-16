@@ -23,7 +23,7 @@ pkgname = gpu-unlock-dkms
 	pkgdesc = Pre-driver NVIDIA GPU tensor-rate unlock (DKMS sources)
 	install = gpu-unlock.install
 	depends = dkms
-	depends = gpu-unlock-firmware=1.1.0-1
+	depends = gpu-unlock-firmware=2.2.0-1
 	backup = etc/mkinitcpio.conf.d/zz-gpu-unlock.conf
 
 pkgname = gpu-unlock-firmware
