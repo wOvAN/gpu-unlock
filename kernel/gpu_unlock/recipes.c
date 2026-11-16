@@ -181,6 +181,64 @@ static const struct gu_payload tu102_v67 = {
 	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
 };
 
+/* TU116's copy of that image, ported from nv-uefi-unlocker's tu11x route (its
+ * issue #151, payload SHA-256 c79208ac...), and one word away from the TU10x
+ * image above. Every referenced entry site of the TU10x chain was checked
+ * against the decrypted TU116 debug secure segment (key family #6): 0x10b9,
+ * 0x1f89 and 0xc95 byte-identical, 0xcbd and 0xe85 entry-identical (only the
+ * in-function lcall immediates differ, on bytes this payload never executes),
+ * the 0x6140 canary address identical, DMEM data segments 176 of 25344 bytes
+ * apart. The one site that moved is the main handoff park: TU116's self-loop
+ * sits at 0x7e9a where TU102 has it at 0x7ea4, so a TU116 card handed the
+ * TU10x image parks on a word of fill and never finalises, which is the
+ * MAILBOX0 0x31 stall recorded at the family. Field-proven on that card: the
+ * Booter halts and both writes read back as built; see the family note for what
+ * that leaves broken. */
+static const struct gu_payload_word tu116_words[] = {
+	{ 0x1100, 0x00000007 },
+	{ 0xf938, 0x00006140 },	/* r3 canary pointer, write 1 */
+	{ 0xf94c, 0x000010b9 },	/* write 1: r0=address, r1=value */
+	{ 0xf950, 0x00006140 },	/* frame 1: r3 for write 2 */
+	{ 0xf964, 0x000010b9 },	/* frame 1: ret -> write 2 */
+	{ 0xf968, 0x00006140 },	/* frame 2: r3 */
+	{ 0xf974, 0x00000000 },
+	{ 0xf97c, 0x00000cbd },	/* frame 2: ret -> mutex release chain */
+	{ 0xf980, 0x00000001 },
+	{ 0xf984, 0x00000000 },
+	{ 0xf988, 0x00008e18 },
+	{ 0xf98c, 0x00000000 },
+	{ 0xf994, 0x00000c95 },
+	{ 0xf998, 0x00006140 },
+	{ 0xf99c, 0x00000000 },
+	{ 0xf9a0, 0x00000000 },
+	{ 0xf9a4, 0x00000001 },
+	{ 0xf9ac, 0x00001f89 },
+	{ 0xf9b0, 0x00006140 },
+	{ 0xf9b4, 0x00006140 },
+	{ 0xf9b8, 0x0000ffff },	/* token: main_sp 0xfff0 + 0xf */
+	{ 0xf9c0, 0x00001f89 },
+	{ 0xf9c4, 0x00006140 },
+	{ 0xf9c8, 0x00006140 },
+	{ 0xf9cc, 0x00000000 },
+	{ 0xf9d4, 0x00000e85 },	/* ACR mutex 3 release */
+	{ 0xf9d8, 0x00001f89 },
+	{ 0xf9dc, 0x00006140 },
+	{ 0xf9e0, 0x00006140 },
+	{ 0xf9e4, 0x00000000 },
+	{ 0xf9ec, 0x00007e9a },	/* normal main handoff, TU116 lbra site */
+	{ 0xf9f8, 0x00000000 },	/* main_sp + 0x08 */
+};
+static const struct gu_payload tu116_v67 = {
+	.name = "tu116-v67-2w",
+	.size = 0xfa00,
+	.fill = 0x000004a7,
+	.slots = tu102_slots,
+	.writes = sizeof(tu102_slots) / sizeof(tu102_slots[0]),
+	.words = tu116_words,
+	.word_count = sizeof(tu116_words) / sizeof(tu116_words[0]),
+	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
+};
+
 /* Turing's FEAT aperture is at 0x409650: opening it lets the host write the
  * SS0/SS1 selectors. WPR_CFG_PLM is never opened to the host on Turing, so
  * the host cannot clear WPR2 itself (restore_frts() is skipped): the chain's
@@ -281,15 +339,13 @@ static const struct gu_booter sec2_ad102 = {
 		.ucode_id = 3,
 	},
 };
-/* This Booter is the tu10x image only, and no TU116 id joins cards[] until its
- * own material exists. 610.43.03 ships a separate tu11x load image
- * (g_bindata_kgspGetBinArchiveBooterLoadUcode_TU116: 58880 B, its own 16 B AES
- * signature and patch location, where tu10x is 59136 B), which no extractor
- * decodes yet. Measured on a TU116 GTX 1660 SUPER: with the tu10x pair the FWSEC
- * loader halts and WPR2 comes up at the FRTS page, then the SEC2 Booter stops in
- * its nonsecure stub (MAILBOX0 0x31) and the first privileged write fails with
- * -EIO. The chip id is 0x168, so a TU116(id)-style line is all that is missing
- * once the tu11x image and its payload are derived. */
+/* 610.43.03 ships a TU116 load image beside the TU10x one, and it is the same
+ * record with the die's own material: 58880 B image where tu10x has 59136, its
+ * own 16 B production signature, and its signature patch at 0x8600 where tu10x
+ * has 0x8700 (extract_boot_assets.py decodes the archive into the bundle this
+ * describes, so the numbers below are read from the driver, not copied). The
+ * GspRmBoot and SEC2 BL images have no TU116 variant in the driver at all, so
+ * the tu102 files serve this family too. */
 static const struct gu_booter sec2_tu102 = {
 	.file = GU_FW_BOOTER_TU102,
 	.launch = GU_SEC2_DIRECT,
@@ -302,6 +358,21 @@ static const struct gu_booter sec2_tu102 = {
 		.os_data_size = 25088,
 		.app_code_size = 33792,
 		.patch_loc = 34560,
+		.ucode_id = 13,
+	},
+};
+static const struct gu_booter sec2_tu116 = {
+	.file = GU_FW_BOOTER_TU116,
+	.launch = GU_SEC2_DIRECT,
+	.payload = &tu116_v67,
+	.expect = {
+		.image_size = 58880,
+		.num_sigs = 1,
+		.sig_bytes = 16,
+		.os_data_off = 33792,
+		.os_data_size = 25088,
+		.app_code_size = 33536,
+		.patch_loc = 34304,
 		.ucode_id = 13,
 	},
 };
@@ -385,6 +456,41 @@ static const struct gu_family tu102 = {
 	.feat_ss1 = GU_TU102_FEAT_SS1_OFFSET,
 	.turing_layout = true,
 };
+/* TU116 takes the TU10x chain verbatim apart from the Booter image and the park
+ * word above, and its FWSEC side measures the same generation: the v2 loader
+ * halts and WPR2 comes up at the FRTS page. What the tu10x image cannot do on
+ * this die is run: on a GTX 1660 SUPER it stops in the nonsecure stub
+ * (MAILBOX0 0x31) and the first privileged write fails with -EIO, which is the
+ * park word above. With this Booter and payload the same card runs to the end,
+ * host side and inside a guest: MAILBOX0 0x9, both privileged writes applied and
+ * read back (FEAT_PLM 0xffffffff, WPR2_ADDR_HI 0), SS0/SS1 at the unlocked
+ * values, a clean handoff. The stock driver then refuses the card:
+ * _kgspBootGspRm reports "unexpected WPR2 already up, cannot proceed with
+ * booting GSP", RmInitAdapter fails, and the GPU stays unusable until it loses
+ * power. The driver's gate is the very register this transaction clears and
+ * reads back as 0 (_kgspBootGspRm tests NV_PFB_PRI_MMU_WPR2_ADDR_HI != 0, and
+ * the only exemption is a per-chip property no dGPU carries), so on this die
+ * something raises WPR2 again between the handoff and the driver's read. The
+ * Booter's terminal MAILBOX0 0x9 belongs to the 0x9x WPR-window family of
+ * nv-uefi-unlocker's status dictionary, so the geometry the TU116 secure stage
+ * validates is the suspect, and the family needs work of its own there. Until
+ * it exists cards[] carries no TU116() line, as GA100 carries none: the
+ * transaction would report success and leave an inert card. The die has no
+ * tensor cores either, so no GEMM uplift could measure the difference even
+ * once it works. */
+static const struct gu_family tu116 = {
+	.name = "TU116",
+	.privileged = GU_WRITE_TABLE(tu102_plm),
+	.host = GU_WRITE_TABLE(tu102_selectors),
+	.fw = &tu102_fw,
+	.booter = &sec2_tu116,
+	.loader = GU_FW_SEC2_BL_TU102,
+	.fwsec_version = 2,
+	.feat_plm = GU_TU102_FEAT_PLM_OFFSET,
+	.feat_ss0 = GU_TU102_FEAT_SS0_OFFSET,
+	.feat_ss1 = GU_TU102_FEAT_SS1_OFFSET,
+	.turing_layout = true,
+};
 
 #define AD102(id) { id, 0x192, &ad10x }
 #define AD103(id) { id, 0x193, &ad10x }
@@ -395,6 +501,7 @@ static const struct gu_family tu102 = {
 #define TU102(id) { id, 0x162, &tu102 }
 #define TU104(id) { id, 0x164, &tu102 }
 #define TU106(id) { id, 0x166, &tu102 }
+#define TU116(id) { id, 0x168, &tu116 }
 
 #define GA100(id) { id, 0x170, &ga100 }
 #define GA102(id) { id, 0x172, &ga10x }

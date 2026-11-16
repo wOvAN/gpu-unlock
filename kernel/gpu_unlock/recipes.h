@@ -16,6 +16,7 @@
 #define GU_FW_BOOT_AD102   "gpu-unlock/610.43.03/gsp_boot_ad102.bin"
 #define GU_FW_DESC_AD102   "gpu-unlock/610.43.03/gsp_boot_desc_ad102.bin"
 #define GU_FW_BOOTER_TU102 "gpu-unlock/610.43.03/booter_load_tu102.bin"
+#define GU_FW_BOOTER_TU116 "gpu-unlock/610.43.03/booter_load_tu116.bin"
 #define GU_FW_BOOT_TU102   "gpu-unlock/610.43.03/gsp_boot_tu102.bin"
 #define GU_FW_DESC_TU102   "gpu-unlock/610.43.03/gsp_boot_desc_tu102.bin"
 #define GU_FW_SEC2_BL_TU102 "gpu-unlock/610.43.03/sec2_bl_tu102.bin"

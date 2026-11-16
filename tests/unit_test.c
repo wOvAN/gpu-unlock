@@ -185,6 +185,9 @@ static void test_recipes_and_payloads(void)
 	size_t i;
 
 	assert(gu_card_find(0x0000) == NULL);
+	/* TU116 has a Booter, a payload and an asset, and deliberately no id in
+	 * cards[]: see the family comment in recipes.c. */
+	assert(gu_card_find(0x21c4) == NULL);
 
 	for (i = 0; i < sizeof(expected_cards) / sizeof(expected_cards[0]); i++) {
 		const struct gu_card *card = gu_card_find(expected_cards[i].id);
@@ -311,6 +314,33 @@ static void test_extracted_assets(const char *assets)
 					      &span) == 0);
 		assert(span.size == 4096);
 		free(data);
+	}
+
+	/* The TU116 Booter has no id in cards[] yet, so nothing at run time reads
+	 * it. Pin the generated bundle to the geometry sec2_tu116 describes, so a
+	 * driver bump that changes the TU116 image fails here and not on hardware. */
+	{
+		long len;
+		u8 *tu116 = read_file(assets, base_name(GU_FW_BOOTER_TU116), &len);
+
+		if (tu116) {
+			struct gpu_unlock_booter_hdr hdr = { 0 };
+			u32 image, sig;
+
+			assert(rd32_le(tu116) == BOOTER_MAGIC && rd32_le(tu116 + 4) == 1u);
+			memcpy(&hdr, tu116 + 8, sizeof(hdr));
+			memcpy(&image, tu116 + 8 + sizeof(hdr), sizeof(image));
+			memcpy(&sig, tu116 + 12 + sizeof(hdr), sizeof(sig));
+			assert(image == 58880 && sig == 16);
+			assert((long)len == 72 + (long)image + (long)sig);
+			assert(hdr.ucode_id == 13 && hdr.engine_id == 1 && hdr.num_apps == 1);
+			assert(hdr.num_sigs == 1);
+			assert(hdr.os_code_off == 0 && hdr.os_code_size == 256);
+			assert(hdr.os_data_off == 33792 && hdr.os_data_size == 25088);
+			assert(hdr.app_code_off == 256 && hdr.app_data_off == 256);
+			assert(hdr.app_data_size == 0 && hdr.patch_loc == 34304);
+			free(tu116);
+		}
 	}
 	printf("unit_test: boot descriptor, Booter and GSP ELF of %s verified\n", assets);
 }

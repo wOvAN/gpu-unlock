@@ -18,6 +18,7 @@ SOURCES = (
     'g_bindata_kgspGetBinArchiveBooterLoadUcode_GA100.c',
     'g_bindata_kgspGetBinArchiveBooterLoadUcode_GA102.c',
     'g_bindata_kgspGetBinArchiveBooterLoadUcode_TU102.c',
+    'g_bindata_kgspGetBinArchiveBooterLoadUcode_TU116.c',
     'g_bindata_kgspGetBinArchiveGspRmBoot_AD102.c',
     'g_bindata_kgspGetBinArchiveGspRmBoot_GA100.c',
     'g_bindata_kgspGetBinArchiveGspRmBoot_GA102.c',
@@ -154,6 +155,11 @@ def extract_assets(source_root: Path, output: Path) -> None:
         raise ValueError('unexpected TU102 SEC2 loader size')
     blobs['booter_load_tu102.bin'] = build_bundle(
         inputs['g_bindata_kgspGetBinArchiveBooterLoadUcode_TU102.c'], 16)
+    # TU116 is the only other Turing die with its own load image; the driver
+    # ships no TU116 GspRmBoot or SEC2 BL archive, so the tu102 files above
+    # serve it too.
+    blobs['booter_load_tu116.bin'] = build_bundle(
+        inputs['g_bindata_kgspGetBinArchiveBooterLoadUcode_TU116.c'], 16)
     blobs['gsp_boot_tu102.bin'] = tu102_image
     blobs['gsp_boot_desc_tu102.bin'] = tu102_desc
     blobs['sec2_bl_tu102.bin'] = tu102_bl
