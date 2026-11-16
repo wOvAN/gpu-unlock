@@ -473,11 +473,16 @@ static const struct gu_family tu102 = {
  * something raises WPR2 again between the handoff and the driver's read. The
  * Booter's terminal MAILBOX0 0x9 belongs to the 0x9x WPR-window family of
  * nv-uefi-unlocker's status dictionary, so the geometry the TU116 secure stage
- * validates is the suspect, and the family needs work of its own there. Until
- * it exists cards[] carries no TU116() line, as GA100 carries none: the
- * transaction would report success and leave an inert card. The die has no
- * tensor cores either, so no GEMM uplift could measure the difference even
- * once it works. */
+ * validates is the suspect, and the family needs work of its own there. That
+ * geometry is the blocker from both sides, measured: the stock GSP boot raises
+ * the register this transaction clears back to its stock 0x17fee00, which is
+ * what the driver's gate then reads, and a run that never clears it (the direct
+ * selectors path, one signed Booter launch, SS0/SS1 applied, PLMs left alone)
+ * lands the selectors and then fails this module's own post-FLR WPR2 check with
+ * -EBUSY, retaining the card. Until it exists cards[] carries no TU116() line,
+ * as GA100 carries none: the transaction would report success and leave an inert
+ * card. The die has no tensor cores either, so no GEMM uplift could measure the
+ * difference even once it works. */
 static const struct gu_family tu116 = {
 	.name = "TU116",
 	.privileged = GU_WRITE_TABLE(tu102_plm),
