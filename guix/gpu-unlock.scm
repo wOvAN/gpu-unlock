@@ -39,10 +39,9 @@
 (define %gpu-unlock-version "2.3.0")
 (define %gpu-unlock-commit "v2.3.0")
 
-; The 2.2 release exists only on the fork that carries the Turing unlock, so
-; the port follows its tags. The checkout hash below is the bootstrap
-; placeholder: the first `guix build gpu-unlock --no-substitutes` prints the
-; real one in its hash-mismatch error, and that is what the port should carry.
+; The 2.x releases exist only on the fork that carries the Turing unlock, so
+; the port follows its tags. The checkout hash below is the nar hash of the
+; tagged tree, `guix hash -x nar` of a fresh checkout of that commit.
 (define gpu-unlock-source
   (origin
     (method git-fetch)
@@ -52,7 +51,7 @@
     (file-name (git-file-name "gpu-unlock" %gpu-unlock-version))
     (sha256
      (base32
-      "0000000000000000000000000000000000000000000000000000"))))
+      "laexe46dawniq5sfybpghqv3rxmcunoc37e7r674z6pszvhwi2qa"))))
 
 (define nvidia-kernel-source-610.43.03
   (origin
