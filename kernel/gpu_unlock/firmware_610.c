@@ -218,8 +218,18 @@ int gpu_unlock_610_load_shared(const struct gu_device *device, struct gpu_unlock
 	assets = claim_bundle(shared, load);
 	if (!assets)
 		return -ENOSPC;
-	if (assets->prepared)
-		return assets->error;
+	if (assets->prepared) {
+		/* A bundle is keyed by the firmware description, and a family can
+		 * share one: TU116 runs on the TU102 GSP boot and SEC2 loader, so
+		 * a TU104 card in the same round has already prepared what this
+		 * card needs from the bundle. Its own Booter image is keyed
+		 * separately and is not in the cache yet, so keep going and never
+		 * unwind the bundle the other card prepared. */
+		ret = ensure_booter(pdev, shared, family->booter);
+		if (ret)
+			return ret;
+		return ensure_loader(pdev, shared, family->loader);
+	}
 	ret = prepare_family(pdev, assets, load);
 	if (ret)
 		goto out;
