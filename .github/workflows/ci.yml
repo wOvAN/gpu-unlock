@@ -32,6 +32,29 @@ jobs:
       - name: Verify the inputs
         run: python3 firmware/fetch_artifacts.py --offline .inputs
 
+  # The parsers and the recipe table compile for userspace too, so their host
+  # tests run on the runner's own gcc, against the same generated firmware the
+  # module requests at run time.
+  unit:
+    name: unit tests
+    runs-on: ubuntu-24.04
+    needs: inputs
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .inputs
+          key: inputs-${{ hashFiles('firmware/fetch_artifacts.py') }}
+          fail-on-cache-miss: true
+      # zstd is in the runner image; the installer payload decoder shells out to
+      # it, so name it here rather than trusting the image.
+      - run: sudo apt-get update -q &&
+          sudo apt-get install -qy --no-install-recommends zstd
+      - run: make firmware INPUTS=.inputs ASSETS=.assets
+      - run: make test-unit ASSETS=.assets
+
   module:
     name: module (${{ matrix.image }})
     runs-on: ubuntu-24.04
