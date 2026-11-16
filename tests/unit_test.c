@@ -157,9 +157,9 @@ static void test_turing_two_write(void)
 
 static void test_recipes_and_payloads(void)
 {
-	/* One representative of every family plus the cards whose owners
-	 * reported a measured unlock: GA103M 0x2420, GA106M 0x2520 and 0x2560,
-	 * GA107, and the Ada laptop SKUs. */
+	/* One representative of every family plus the cards whose owners reported a
+	 * measured unlock: the GA10x and AD10x desktop and laptop SKUs of the
+	 * success reports, and the mobile TU106. */
 	static const struct {
 		u16 id;
 		u32 chip;
@@ -167,6 +167,7 @@ static void test_recipes_and_payloads(void)
 		{ 0x1e07, 0x162 }, /* RTX 2080 Ti (TU102) */
 		{ 0x1e84, 0x164 }, /* RTX 2070 SUPER (TU104) */
 		{ 0x1f08, 0x166 }, /* RTX 2060 (TU106) */
+		{ 0x1f50, 0x166 }, /* RTX 2070 Laptop (TU106BM) */
 		{ 0x2204, 0x172 }, /* RTX 3090 (GA102) */
 		{ 0x2414, 0x173 }, /* RTX 3080 Laptop (GA103) */
 		{ 0x2420, 0x173 }, /* RTX 3080 Ti Laptop (GA103) */
@@ -175,12 +176,19 @@ static void test_recipes_and_payloads(void)
 		{ 0x2520, 0x176 }, /* RTX 3060 Laptop (GA106) */
 		{ 0x2560, 0x176 }, /* RTX 3060 Laptop (GA106) */
 		{ 0x2582, 0x177 }, /* RTX 3050 (GA107) */
+		{ 0x25a2, 0x177 }, /* RTX 3050 Laptop (GA107M) */
+		{ 0x25ac, 0x177 }, /* RTX 3050 6 GB Laptop (GA107BM) */
+		{ 0x25ad, 0x177 }, /* RTX 2050 Laptop (GA107) */
+		{ 0x25ed, 0x177 }, /* RTX 2050 (GA107) */
 		{ 0x2684, 0x192 }, /* RTX 4090 (AD102) */
 		{ 0x2704, 0x193 }, /* RTX 4080 (AD103) */
+		{ 0x2717, 0x193 }, /* RTX 4090 Laptop (AD103M) */
 		{ 0x2786, 0x194 }, /* RTX 4070 (AD104) */
+		{ 0x27e0, 0x194 }, /* RTX 4080 Laptop (AD104M) */
 		{ 0x2805, 0x196 }, /* RTX 4060 Ti 16 GB (AD106) */
 		{ 0x2820, 0x196 }, /* RTX 4070 Laptop (AD106) */
 		{ 0x28a0, 0x197 }, /* RTX 4060 Laptop (AD107) */
+		{ 0x28a1, 0x197 }, /* RTX 4050 Laptop (AD107) */
 	};
 	size_t i;
 
