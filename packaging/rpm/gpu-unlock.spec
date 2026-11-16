@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.1.0
+Version: 2.2.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -129,6 +129,16 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Mon Nov 16 2026 Zagitta <zetlon+github@gmail.com> - 2.2.0-1
+- Unlock Turing (TU102, TU104 and TU106) with the two-write chain: the
+  Booter opens WPR_CFG_PLM and then the FEAT aperture, and the GSP launch
+  tolerates a halted engine before the FWSEC v2 loader, settles after the
+  GSP reset and polls the TU10x scrub in DMACTL.
+- Add the GA103M RTX 3080 Ti Laptop id.
+- Document unlocking for virtualized GPUs.
+- Run the host unit tests of the parsers and the recipe table in CI, and
+  assert all three initramfs-tools drop-ins in the package round-trip.
+
 * Thu Nov 12 2026 Zagitta <zetlon+github@gmail.com> - 2.1.0-1
 - Add GA107 and the reported GA106 and AD106 laptop SKUs.
 - Pad Booter DMEM sizes to the Falcon DMA granularity.

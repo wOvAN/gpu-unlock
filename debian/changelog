@@ -1,3 +1,17 @@
+gpu-unlock (2.2.0) UNRELEASED; urgency=medium
+
+  * Unlock Turing (TU102, TU104 and TU106) with the two-write chain: the
+    Booter opens WPR_CFG_PLM and then the FEAT aperture, and the GSP launch
+    tolerates a halted engine before the FWSEC v2 loader, settles after the
+    GSP reset and polls the TU10x scrub in DMACTL. TU116 and TU117 (the GTX
+    16 series) stay out of the table: their Booter image is not derived yet.
+  * Add the GA103M RTX 3080 Ti Laptop id.
+  * Document unlocking for virtualized GPUs.
+  * Run the host unit tests of the parsers and the recipe table in CI, and
+    assert all three initramfs-tools drop-ins in the package round-trip.
+
+ -- Zagitta <zetlon+github@gmail.com>  Mon, 16 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.1.0) UNRELEASED; urgency=medium
 
   * Add GA107 and the reported GA106 and AD106 laptop SKUs.
