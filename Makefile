@@ -170,16 +170,20 @@ rebuild-none:
 
 install-local: assets
 	@$(MAKE) dkms-install SUDO="$(SUDO)"
-	@$(SUDO) $(MAKE) install-firmware install-licenses DESTDIR=/
+	@$(SUDO) $(MAKE) install-firmware install-licenses DESTDIR=/ ASSETS="$(ASSETS)"
 	@$(MAKE) install-boot BOOT=$(BOOT) SUDO="$(SUDO)"
 	@$(MAKE) rebuild-initramfs TARGET=$(TARGET) SUDO="$(SUDO)"
 	@echo "Installed. Opt in on the kernel command line: gpu_unlock.targets=all"
 
 uninstall-local:
 	@$(MAKE) dkms-uninstall SUDO="$(SUDO)"
-	$(SUDO) rm -rf $(FWDIR) $(LICENSEDIR)/$(PKG) $(LICENSEDIR)/gpu-unlock-firmware
+	$(SUDO) rm -rf $(FWDIR) $(LICENSEDIR)/$(PKG) $(LICENSEDIR)/gpu-unlock-firmware \
+		/usr/share/doc/gpu-unlock
 	$(SUDO) rm -f /etc/mkinitcpio.conf.d/zz-gpu-unlock.conf \
 		/usr/share/initramfs-tools/modules.d/gpu-unlock.conf \
+		/usr/share/initramfs-tools/scripts/init-top/gpu-unlock \
+		/usr/share/initramfs-tools/hooks/gpu-unlock \
+		/usr/share/initramfs-tools/scripts/init-premount/gpu-unlock \
 		/usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
 	@$(MAKE) rebuild-initramfs TARGET=$(TARGET) SUDO="$(SUDO)"
 

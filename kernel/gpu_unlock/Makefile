@@ -29,4 +29,5 @@ debug:
 	@$(MAKE) -C "$(KDIR)" M="$(CURDIR)" ccflags-y+=-DDEBUG modules
 
 clean:
+	@test -n "$(KDIR)" || { echo "No kernel build tree for $(TARGET): install the kernel headers, or pass KDIR=/path/to/build." >&2; exit 1; }
 	@$(MAKE) -C "$(KDIR)" M="$(CURDIR)" clean
