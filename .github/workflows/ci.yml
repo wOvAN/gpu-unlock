@@ -60,6 +60,34 @@ jobs:
           python3 tests/packaging/test_aur_publish.py
           python3 -m unittest discover -s tests -p 'test_sm_rates.py'
 
+  # The packager-free path is the installer for distros with no native
+  # packager: DKMS builds the module, and the firmware, the licenses and the
+  # initramfs drop-ins are placed by hand. Its gate is a real install and a
+  # real removal, in a container with a kernel to build for, asserting the
+  # image really carries the module and its firmware.
+  local-install:
+    name: packager-free install
+    runs-on: ubuntu-24.04
+    container: debian:13
+    needs: inputs
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          # The test clones this checkout to install a clean copy, and a
+          # shallow clone cannot be cloned --shared.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .inputs
+          key: inputs-${{ hashFiles('firmware/fetch_artifacts.py') }}
+          fail-on-cache-miss: true
+      - name: Install, verify, remove
+        env:
+          SRC: ${{ github.workspace }}
+          INPUTS: ${{ github.workspace }}/.inputs
+        run: sh tests/docker/test-local-install.sh "$(git rev-parse HEAD)"
+
   module:
     name: module (${{ matrix.image }})
     runs-on: ubuntu-24.04

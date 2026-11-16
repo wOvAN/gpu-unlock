@@ -1,0 +1,118 @@
+# SPDX-License-Identifier: GPL-2.0-only
+name: TrueNAS
+
+on:
+  push:
+    paths:
+      - kernel/**
+      - firmware/**
+      - licenses/**
+      - Makefile
+      - VERSION
+      - packaging/truenas/**
+      - .github/workflows/truenas.yml
+  pull_request:
+    paths:
+      - kernel/**
+      - firmware/**
+      - licenses/**
+      - Makefile
+      - VERSION
+      - packaging/truenas/**
+      - .github/workflows/truenas.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# A TrueNAS host gives its kernel headers to packaging/truenas/build.sh as a
+# tarball, so the gate is that tarball: it is produced here from Debian 12
+# headers, the distribution TrueNAS's kernel is built with, and the whole
+# bundle is then built and checked. The module source and the firmware
+# pipeline are the real subjects; the TrueNAS kernel version is the variable.
+jobs:
+  headers:
+    name: Debian 12 kernel headers
+    runs-on: ubuntu-24.04
+    container: debian:12
+    steps:
+      # Install git and tar before checkout; the image has neither.
+      - run: apt-get update -q &&
+          apt-get install -qy --no-install-recommends ca-certificates git tar
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - run: apt-get install -qy --no-install-recommends linux-headers-amd64
+      - name: Pack the headers as host-diagnostics.sh does
+        run: |
+          set -eu
+          k=$(ls -d /lib/modules/*/build | head -n1)
+          k=${k%/build}; k=${k##*/}
+          echo "kernel: $k"
+          # Dereferenced real files, exactly as the host script sends them.
+          tar -C "$(realpath "/lib/modules/$k/build")" -chzf kernel-headers.tar.gz .
+          tar -tzf kernel-headers.tar.gz |
+            grep -qE '(^|/)include/config/auto\.conf$'
+      - uses: actions/upload-artifact@26f96dfa697d77e81fd5907df203aa23a56210a8 # v4.3.0
+        with:
+          name: truenas-headers
+          path: kernel-headers.tar.gz
+          if-no-files-found: error
+
+  bundle:
+    name: build and check the bundle
+    runs-on: ubuntu-24.04
+    needs: headers
+    steps:
+      # build.sh mounts the checkout into its build container, so leave no
+      # token in it.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      # The pinned NVIDIA inputs, from the cache the CI inputs job fills.
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: .inputs
+          key: inputs-${{ hashFiles('firmware/fetch_artifacts.py') }}
+          fail-on-cache-miss: true
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: truenas-headers
+          path: /tmp/truenas-host
+      - name: Build the bundle
+        run: |
+          set -eu
+          NV=$(sed -n 's/^NV *:= *//p' Makefile)
+          mkdir -p "packaging/truenas/work/inputs-$NV"
+          cp .inputs/* "packaging/truenas/work/inputs-$NV/"
+          packaging/truenas/build.sh /tmp/truenas-host
+      - name: Check the bundle
+        run: |
+          set -eu
+          NV=$(sed -n 's/^NV *:= *//p' Makefile)
+          archive=$(ls packaging/truenas/out/gpu-unlock-*.tar.gz)
+          dir=${archive%.tar.gz}
+          tar -xzf "$archive" -C packaging/truenas/out
+          base=$(basename "$dir")
+          kver=$(sed -n 's/^#define UTS_RELEASE "\(.*\)"/\1/p' \
+            "packaging/truenas/work/module/KERNEL")
+          test "$base" = "gpu-unlock-$kver"
+          cd "packaging/truenas/out/$base"
+          test -f gpu_unlock.ko
+          test -f gpu-unlock-load.sh
+          test "$(modinfo -F vermagic gpu_unlock.ko | cut -d' ' -f1)" = "$kver"
+          modinfo -F firmware gpu_unlock.ko | grep -q 'gpu-unlock/'
+          test "$(find "firmware/gpu-unlock/$NV" -name '*.bin' | wc -l)" -eq \
+            "$(grep -c 'MODULE_FIRMWARE(' ../../../../kernel/gpu_unlock/firmware_610.c)"
+          test -f "firmware/gpu-unlock/$NV/gsp_ga10x.bin"
+          test -f "firmware/gpu-unlock/$NV/booter_load_tu102.bin"
+          test -s NVIDIA-LICENSE
+          grep -q 'kernel compiler' BUILDINFO
+          grep -q 'build compiler' BUILDINFO
+          sha256sum -c SHA256SUMS
+          echo "TrueNAS bundle for $kver: module, loader, $(
+            find "firmware/gpu-unlock/$NV" -name '*.bin' | wc -l) firmware files"
