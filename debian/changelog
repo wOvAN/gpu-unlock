@@ -1,3 +1,15 @@
+gpu-unlock (2.5.0) UNRELEASED; urgency=medium
+
+  * Carry the laptop SKUs the field measured, each one line in the card table
+    and on its family's existing assets. The success reports gave TU106BM
+    0x1f50, GA107 0x25a2, 0x25ac, 0x25ad and 0x25ed, AD103M 0x2717, AD104M
+    0x27e0 and AD107M 0x28a1; the pre-boot project's device matrix logged
+    TU104M 0x1e93, TU104BM 0x1ed1, TU106M 0x1f14 and 0x1f15 and GA107BM
+    0x25e2 unlocked with the chip id our table already carries for that die.
+    Every one of them is pinned, with its chip, in the host test.
+
+ -- Zagitta <zetlon+github@gmail.com>  Tue, 17 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.4.0) UNRELEASED; urgency=medium
 
   * Prepare the Booter and the Falcon loader of every selected card, not of

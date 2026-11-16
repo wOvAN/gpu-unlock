@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.4.0
+Version: 2.5.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -134,6 +134,13 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Tue Nov 17 2026 Zagitta <zetlon+github@gmail.com> - 2.5.0-1
+- Carry the laptop SKUs the field measured, one table line each and on their
+  family's existing assets: the success reports' TU106BM 0x1f50, GA107
+  0x25a2, 0x25ac, 0x25ad and 0x25ed, AD103M 0x2717, AD104M 0x27e0 and AD107M
+  0x28a1, and the pre-boot project's TU104M 0x1e93, TU104BM 0x1ed1, TU106M
+  0x1f14 and 0x1f15 and GA107BM 0x25e2.
+
 * Tue Nov 17 2026 Zagitta <zetlon+github@gmail.com> - 2.4.0-1
 - Prepare the Booter and the Falcon loader of every selected card, not of
   every firmware bundle, so a family that shares another family's GSP boot
