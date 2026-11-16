@@ -32,7 +32,7 @@ DEBS    := $(foreach p,dkms firmware,$(DEBDIR)/gpu-unlock-$(p)_$(VERSION)_all.de
 .PHONY: all dist inputs firmware assets install-dkms install-firmware \
         install-mkinitcpio install-initramfs-tools install-dracut \
         install-licenses arch deb rpm install install-arch install-deb install-rpm install-suse \
-        test-unit test-module test-packages \
+        test-unit test-module test-packages test-local \
         modules clean-modules dkms-install dkms-uninstall install-boot \
         rebuild-initramfs install-local uninstall-local insmod rmmod status \
         install-none rebuild-dracut rebuild-initramfs-tools rebuild-mkinitcpio rebuild-none
@@ -287,10 +287,15 @@ test-unit:
 		-o $(DISTDIR)/unit_test
 	$(DISTDIR)/unit_test $(ASSETS)
 
-# Build the module, or build, install and remove the packages, in a
-# container of each distribution.
+# Build the module, or build, install and remove the packages, or install
+# and remove the tree without a packager, in a container.
 test-module:
 	tests/docker.sh module
 
 test-packages:
 	INPUTS=$(INPUTS) tests/docker.sh package
+
+# The packager-free path needs a kernel to build for and the initramfs
+# tools of a Debian system, so it runs where it is supported.
+test-local:
+	INPUTS=$(INPUTS) tests/docker.sh local

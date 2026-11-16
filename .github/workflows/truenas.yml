@@ -113,8 +113,10 @@ jobs:
           dir=${archive%.tar.gz}
           tar -xzf "$archive" -C packaging/truenas/out
           base=$(basename "$dir")
-          kver=$(sed -n 's/^#define UTS_RELEASE "\(.*\)"/\1/p' \
-            "packaging/truenas/work/module/KERNEL")
+          # build.sh writes the bare version there, extracted from
+          # utsrelease.h, so read it as it is.
+          kver=$(cat packaging/truenas/work/module/KERNEL)
+          test -n "$kver"
           test "$base" = "gpu-unlock-$kver"
           cd "packaging/truenas/out/$base"
           test -f gpu_unlock.ko

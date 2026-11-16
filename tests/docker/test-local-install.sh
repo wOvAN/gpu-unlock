@@ -3,7 +3,7 @@
 # SRC is the checkout to install and INPUTS the NVIDIA input cache; both are
 # mounted paths in tests/docker.sh and the workspace in CI.
 set -eu
-commit=$1
+commit=${1:?usage: test-local-install.sh <commit to install>}
 src=${SRC:-/src}
 inputs=${INPUTS:-/inputs}
 apt-get update -q
