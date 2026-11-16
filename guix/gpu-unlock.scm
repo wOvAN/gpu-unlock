@@ -36,19 +36,23 @@
             gpu-unlock-source
             %gpu-unlock-version))
 
-(define %gpu-unlock-version "2.0.0")
-(define %gpu-unlock-commit "7eb51bccae0a0b7e599e084d971170e9a1e82d0c")
+(define %gpu-unlock-version "2.2.0")
+(define %gpu-unlock-commit "v2.2.0")
 
+; The 2.2 release exists only on the fork that carries the Turing unlock, so
+; the port follows its tags. The checkout hash below is the bootstrap
+; placeholder: the first `guix build gpu-unlock --no-substitutes` prints the
+; real one in its hash-mismatch error, and that is what the port should carry.
 (define gpu-unlock-source
   (origin
     (method git-fetch)
     (uri (git-reference
-          (url "https://github.com/Zagitta/gpu-unlock")
+          (url "https://github.com/wOvAN/gpu-unlock")
           (commit %gpu-unlock-commit)))
     (file-name (git-file-name "gpu-unlock" %gpu-unlock-version))
     (sha256
      (base32
-      "1m84a37xk2qha65pj8g6zvds6yqm11x0vrv3prb2b46dzbhg62bq"))))
+      "0000000000000000000000000000000000000000000000000000"))))
 
 (define nvidia-kernel-source-610.43.03
   (origin
