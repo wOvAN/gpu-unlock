@@ -159,14 +159,19 @@ static void test_recipes_and_payloads(void)
 {
 	/* One representative of every family plus the cards whose owners reported a
 	 * measured unlock: the GA10x and AD10x desktop and laptop SKUs of the
-	 * success reports, and the mobile TU106. */
+	 * success reports, and the mobile TU104 and TU106 the pre-boot project's
+	 * device matrix logged green. */
 	static const struct {
 		u16 id;
 		u32 chip;
 	} expected_cards[] = {
 		{ 0x1e07, 0x162 }, /* RTX 2080 Ti (TU102) */
 		{ 0x1e84, 0x164 }, /* RTX 2070 SUPER (TU104) */
+		{ 0x1e93, 0x164 }, /* RTX 2080 SUPER Max-Q (TU104M) */
+		{ 0x1ed1, 0x164 }, /* RTX 2070 SUPER Laptop (TU104BM) */
 		{ 0x1f08, 0x166 }, /* RTX 2060 (TU106) */
+		{ 0x1f14, 0x166 }, /* RTX 2070 Laptop Refresh (TU106M) */
+		{ 0x1f15, 0x166 }, /* RTX 2060 Laptop (TU106M) */
 		{ 0x1f50, 0x166 }, /* RTX 2070 Laptop (TU106BM) */
 		{ 0x2204, 0x172 }, /* RTX 3090 (GA102) */
 		{ 0x2414, 0x173 }, /* RTX 3080 Laptop (GA103) */
@@ -179,6 +184,7 @@ static void test_recipes_and_payloads(void)
 		{ 0x25a2, 0x177 }, /* RTX 3050 Laptop (GA107M) */
 		{ 0x25ac, 0x177 }, /* RTX 3050 6 GB Laptop (GA107BM) */
 		{ 0x25ad, 0x177 }, /* RTX 2050 Laptop (GA107) */
+		{ 0x25e2, 0x177 }, /* RTX 3050 Laptop (GA107BM) */
 		{ 0x25ed, 0x177 }, /* RTX 2050 (GA107) */
 		{ 0x2684, 0x192 }, /* RTX 4090 (AD102) */
 		{ 0x2704, 0x193 }, /* RTX 4080 (AD103) */
