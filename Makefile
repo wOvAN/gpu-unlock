@@ -185,6 +185,8 @@ uninstall-local:
 		/usr/share/initramfs-tools/hooks/gpu-unlock \
 		/usr/share/initramfs-tools/scripts/init-premount/gpu-unlock \
 		/usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
+	@# FWDIR is versioned, so its parent survives the rm; drop it while empty.
+	@$(SUDO) rmdir $(dir $(patsubst %/,%,$(FWDIR))) 2>/dev/null || :
 	@$(MAKE) rebuild-initramfs TARGET=$(TARGET) SUDO="$(SUDO)"
 
 # Load the locally built module by hand. It does nothing to a card the
