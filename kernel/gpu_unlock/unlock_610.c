@@ -1552,6 +1552,11 @@ static int unlock_transaction_reset(struct unlock_transaction_work *work, bool c
 			dev_err(&work->pdev->dev, "Turing WPR2 still enabled: lo=%#x hi=%#x; stock driver requires HI.VAL=0\n", lo, hi);
 			return GU_RESULT(-EBUSY);
 		}
+		/* Read them here: the containment entry skips the pre-FLR read,
+		 * and this handoff keeps the selectors, so their post-handoff
+		 * values are the ones worth logging. */
+		read_bar(work, work->card->family->feat_ss0, &ss0);
+		read_bar(work, work->card->family->feat_ss1, &ss1);
 		read_bar(work, GU_TU102_FEAT_READOUT_OFFSET, &readout);
 		work->state = GU_QUIESCED;
 		dev_info(&work->pdev->dev,
