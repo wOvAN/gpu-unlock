@@ -479,7 +479,14 @@ static const struct gu_family tu102 = {
  * what the driver's gate then reads, and a run that never clears it (the direct
  * selectors path, one signed Booter launch, SS0/SS1 applied, PLMs left alone)
  * lands the selectors and then fails this module's own post-FLR WPR2 check with
- * -EBUSY, retaining the card. Until it exists cards[] carries no TU116() line,
+ * -EBUSY, retaining the card. The driver's minor is not the variable: the same
+ * transaction on the same card under 610.43.03 runs the identical chain (measured
+ * 2026-11-22 over the 580.178.04 that showed it first) - kflcnWaitForHalt_TU102
+ * times out, Booter Load reports status 0x65 with MAILBOX0 0x31, the gate then
+ * refuses - while a TU104 unlocked in the same boot reaches 64.97 TFLOPS FP16 on
+ * that same driver build. nv-uefi-unlocker's TU117 record ends at the same
+ * refusal on 580.178.04, so the 16 series refuses as a family, from the pre-boot
+ * and the in-kernel path alike. Until it exists cards[] carries no TU116() line,
  * as GA100 carries none: the transaction would report success and leave an inert
  * card. The die has no tensor cores either, so no GEMM uplift could measure the
  * difference even once it works. */
