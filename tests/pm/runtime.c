@@ -74,8 +74,8 @@ static int dev_set_name(struct device *d, const char *n) { (void)d; (void)n; ret
 static int device_add(struct device *d) { (void)d; return 0; }
 static void put_device(struct device *d) { d->type->release(d); }
 static void device_unregister(struct device *d) { put_device(d); }
-static void pci_dev_lock(struct pci_dev *p) { assert(!p->dev.locked); p->dev.locked = true; }
-static void pci_dev_unlock(struct pci_dev *p) { assert(p->dev.locked); p->dev.locked = false; }
+static void gu_pci_dev_lock(struct pci_dev *p) { assert(!p->dev.locked); p->dev.locked = true; }
+static void gu_pci_dev_unlock(struct pci_dev *p) { assert(p->dev.locked); p->dev.locked = false; }
 static unsigned int memalloc_noio_save(void) { unsigned int old = noio; noio++; return old; }
 static void memalloc_noio_restore(unsigned int old) { noio = old; }
 static void disable_irq(unsigned int irq) { assert(irq < 4096); irq_depth[irq]++; }
@@ -192,9 +192,9 @@ int main(void)
 	p.dev.driver = &nvidia;
 	/* Driver removal and system sleep can request runtime resume while they
 	 * hold the PCI device lock. Recursively taking it would deadlock. */
-	pci_dev_lock(&p);
+	gu_pci_dev_lock(&p);
 	assert(pm->domain.ops.runtime_resume(&p.dev) == 0);
-	pci_dev_unlock(&p);
+	gu_pci_dev_unlock(&p);
 	assert(powers == 1 && restores == 1 && unlocks == 1 && resumes == 1);
 
 	reset_counts();

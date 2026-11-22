@@ -2,9 +2,6 @@
 #ifndef GPU_UNLOCK_DEVICE_H
 #define GPU_UNLOCK_DEVICE_H
 
-#include <linux/pci.h>
-#include <linux/version.h>
-
 struct pci_dev;
 struct gu_card;
 
@@ -12,7 +9,14 @@ struct gu_card;
  * takes, in the same order: config access stopped, then the device lock, which
  * is what every transaction here holds. Ubuntu exports it in its own 5.15,
  * which is why the 5.15 build in CI never showed this.
+ *
+ * The host tests compile pm.c with their own pci_dev and their own lock, so
+ * they declare the pair instead of building one out of kernel calls.
  */
+#ifdef __KERNEL__
+#include <linux/pci.h>
+#include <linux/version.h>
+
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 16, 0)
 static inline void gu_pci_dev_lock(struct pci_dev *pdev)
 {
@@ -35,6 +39,10 @@ static inline void gu_pci_dev_unlock(struct pci_dev *pdev)
 {
 	pci_dev_unlock(pdev);
 }
+#endif
+#else
+void gu_pci_dev_lock(struct pci_dev *pdev);
+void gu_pci_dev_unlock(struct pci_dev *pdev);
 #endif
 
 /* Resolved once during enumeration. The coordinator owns the PCI reference.
