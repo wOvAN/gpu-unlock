@@ -9,3 +9,4 @@ ccflags-y += $(if $(shell grep -s 'int exclude_bars' $(srctree)/include/linux/pc
 ccflags-y += $(if $(shell grep -A 1 'pm_runtime_get_if_active' $(srctree)/include/linux/pm_runtime.h | grep 'bool'),-DGU_PM_ACTIVE_HAS_IGNORE)
 ccflags-y += $(if $(shell grep -s 'unsigned int lock_system_sleep' $(srctree)/include/linux/suspend.h),-DGU_SLEEP_LOCK_FLAGS)
 ccflags-y += $(if $(shell grep -s 'msi_get_virq' $(srctree)/include/linux/msi.h $(srctree)/include/linux/msi_api.h),-DGU_MSI_GET_VIRQ)
+ccflags-y += $(if $(shell grep -s 'aperture_remove_conflicting_pci_devices' $(srctree)/include/linux/aperture.h),-DGU_APERTURE_PCI_HELPER)
