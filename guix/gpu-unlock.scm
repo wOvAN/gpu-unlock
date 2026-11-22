@@ -36,12 +36,14 @@
             gpu-unlock-source
             %gpu-unlock-version))
 
-(define %gpu-unlock-version "2.5.0")
-(define %gpu-unlock-commit "v2.5.0")
+(define %gpu-unlock-version "3.0.0")
+(define %gpu-unlock-commit "v3.0.0")
 
-; The 2.x releases exist only on the fork that carries the Turing unlock, so
-; the port follows its tags. The checkout hash below is the nar hash of the
-; tagged tree, `guix hash -x nar` of a fresh checkout of that commit.
+; The releases exist only on the fork that carries the Turing unlock, so the
+; port follows its tags. The checkout hash below is the nar hash of the
+; tagged tree, `guix hash -x nar` of a fresh checkout of that commit: a
+; base-32 (0-9a-z, digits from the low end) of the SHA-256 of the Nix dump
+; of the tree, which is `nix hash path` of the checkout without its .git.
 (define gpu-unlock-source
   (origin
     (method git-fetch)
@@ -51,7 +53,7 @@
     (file-name (git-file-name "gpu-unlock" %gpu-unlock-version))
     (sha256
      (base32
-      "gxv2v7rodmcxdzrocb3bzgafx7z2hsfchrq3pzg4pvdbtr7oj2ja"))))
+      "0g8dsvw4dx3gav43lii62cgapsvpv37fk891r4w95ss8a8ndqbgx"))))
 
 (define nvidia-kernel-source-610.43.03
   (origin
@@ -62,7 +64,7 @@
     (file-name "NVIDIA-kernel-module-source-610.43.03.tar.xz")
     (sha256
      (base32
-      "pyiysi6hui7nynqrjvrsoosg4pqe5gxzq2k2iiqd46wc37u7yhoa"))))
+      "1p61kzz2vb770cia95c6z6d4xq738qx2fqsd24vdqgm2qwiqj4by"))))
 
 (define nvidia-installer-610.43.03
   (origin
@@ -73,7 +75,7 @@
     (file-name "NVIDIA-Linux-x86_64-610.43.03-no-compat32.run")
     (sha256
      (base32
-      "4ccekhnxgctn6kot25hwkv2jytjdny6jix35ss2saxueggh6f6ia"))))
+      "141gzqc47s05a95xkxs5r7ikdln495bnakypsclxz9ihnwflb170"))))
 
 (define %fw-dir "lib/firmware/gpu-unlock/610.43.03")
 

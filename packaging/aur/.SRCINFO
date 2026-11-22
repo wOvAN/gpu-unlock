@@ -1,6 +1,6 @@
 pkgbase = gpu-unlock
 	pkgdesc = Pre-driver NVIDIA GPU unlock for full FP16/BF16 tensor instruction rate
-	pkgver = 2.5.0
+	pkgver = 3.0.0
 	pkgrel = 1
 	url = https://github.com/wOvAN/gpu-unlock
 	arch = x86_64
@@ -10,11 +10,11 @@ pkgbase = gpu-unlock
 	noextract = NVIDIA-Linux-x86_64-610.43.03-no-compat32.run
 	options = !strip
 	options = !debug
-	source = gpu-unlock-f6c5393aa1c3b3ed3c3f41e4b9e0dcb901c905cf.tar.gz::https://github.com/wOvAN/gpu-unlock/archive/f6c5393aa1c3b3ed3c3f41e4b9e0dcb901c905cf.tar.gz
+	source = gpu-unlock-a3dbf23e9a725238464a619274eac9a2e31bd12a.tar.gz::https://github.com/wOvAN/gpu-unlock/archive/a3dbf23e9a725238464a619274eac9a2e31bd12a.tar.gz
 	source = https://download.nvidia.com/XFree86/NVIDIA-kernel-module-source/NVIDIA-kernel-module-source-610.43.03.tar.xz
 	source = https://download.nvidia.com/XFree86/Linux-x86_64/610.43.03/NVIDIA-Linux-x86_64-610.43.03-no-compat32.run
 	source = gpu-unlock.install
-	sha256sums = 1fff9f9e6bdaf8e31a2e3b1d5bcb16d367ef9fc57accf79b068e9008568c98ee
+	sha256sums = a70f226d3d1f7b421cedfd10b6ed6776161b34d4f3a19d31b81926857fa6705d
 	sha256sums = 7e118923c7a23edc36114d63273a46e3e04e9af98695a42203e7ac2dfe9fc1dc
 	sha256sums = e084451db730a6df29d3d74f655749c4d236e3c945f7d94b5205e84318fe2f90
 	sha256sums = a2b008f9261d531e824e99f3252a87acf46e7b8cb96809a1d7c486b3ac00042f
@@ -23,7 +23,7 @@ pkgname = gpu-unlock-dkms
 	pkgdesc = Pre-driver NVIDIA GPU tensor-rate unlock (DKMS sources)
 	install = gpu-unlock.install
 	depends = dkms
-	depends = gpu-unlock-firmware=2.5.0-1
+	depends = gpu-unlock-firmware=3.0.0-1
 	backup = etc/mkinitcpio.conf.d/zz-gpu-unlock.conf
 
 pkgname = gpu-unlock-firmware
