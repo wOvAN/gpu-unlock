@@ -218,6 +218,18 @@ static u32 booter_image_bytes(const struct gpu_unlock_booter_hdr *hdr)
 	return hdr->os_data_off + hdr->os_data_size;
 }
 
+/* The Booter reports its exit code in MAILBOX0, and the code is the diagnosis,
+ * so read them verbatim: 0x00 secure entry ran to completion, 0x31 it never ran
+ * at all (only the nonsecure stub executed, the usual sign of Booter material
+ * that does not match the die), 0x89 a meta/descriptor mismatch, 0x91 the
+ * launch's meta read refused, 0x0B the final hash compare, 0x11 a GetParam
+ * table id.  The 0x89/0x91 pair is band-dependent: the v61 Turing Booter
+ * refuses to read staging below 4 GiB, while a launch whose meta page sits
+ * above 4 GiB fails to be read at all on machines that cannot reach that high
+ * (internal eDP, MUXless hybrids, Thunderbolt enclosures).  Both are
+ * deterministic per machine, so the address we staged at is part of every
+ * report: the stage=dma line prints meta=, and 0x89 with a meta= below 4 GiB,
+ * or 0x91 above it, says the band, not the recipe, is what the host refused. */
 static void gu_read_boot_state(struct unlock_transaction_work *work,
 			       struct gu_boot_state *state)
 {
@@ -741,7 +753,10 @@ static int unlock_transaction_claim(struct unlock_transaction_work *work)
  * A 32-bit mask is not merely conservative, it fails outright on hosts whose
  * PCIe inbound window maps system RAM above 4 GiB of bus address, e.g. the
  * Raspberry Pi 5 (bus 0x1000000000 -> cpu 0x0), where no coherent buffer
- * can then be allocated and the unlock stops at the first one with -ENOMEM. */
+ * can then be allocated and the unlock stops at the first one with -ENOMEM.
+ * The width also decides which staging band the falcon gets, since it is the
+ * allocator that picks the address: see the MAILBOX0 note above gu_read_boot_state()
+ * for the 0x89/0x91 pair that reads as the host refusing the band. */
 #define GU_DMA_MASK DMA_BIT_MASK(47)
 
 static int unlock_transaction_dma(struct unlock_transaction_work *work)
