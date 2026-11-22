@@ -140,6 +140,9 @@ existing options:
   ```sh
   sudo grubby --update-kernel=ALL --args="gpu_unlock.targets=all"
   ```
+  `grub2-mkconfig` rewrites the `options` line of every BLS entry from `GRUB_CMDLINE_LINUX`,
+  whatever `-o` points at, so a later run drops the parameter from a hand-written entry. Pass
+  `--no-grubenv-update`, or put the parameter in `GRUB_CMDLINE_LINUX`.
 - **systemd-boot:** append `gpu_unlock.targets=all` to the `options` line in your boot entry
 (`bootctl status` shows its location).
 - **UKI / generated entries:** add `gpu_unlock.targets=all` to `/etc/kernel/cmdline` and regenerate
@@ -147,6 +150,11 @@ your boot images/entries (e.g. `sudo mkinitcpio -P` for mkinitcpio UKIs).
 - **Limine:** append `gpu_unlock.targets=all` to cmdline in `/boot/limine/limine.conf`.
 - **rEFInd:** append `gpu_unlock.targets=all` to "Boot using default options" in `/boot/refind_linux.conf`.
 - **Omarchy:** add `gpu_unlock.targets=all` inside `KERNEL_CMDLINE[default]` in `/etc/default/limine`, then run `sudo limine-update`.
+
+**Secure Boot:** the DKMS module has to be signed with a MOK key and that key enrolled, because
+`sig_enforce=Y` refuses an unsigned module without saying so. `mok_certificate` wants the
+certificate in DER; a PEM one fails `kmodsign` with `asn1 ... wrong tag`, so convert it with
+`openssl x509 -in cert.pem -outform DER -out cert.der`.
 
 **Reboot**, then [check the kernel log](#boot-flow-and-opt-in) for the result.
 Upgrading from 2.0? Run `git pull` and `make install`, keep your existing
