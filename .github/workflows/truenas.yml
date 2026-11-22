@@ -129,7 +129,7 @@ jobs:
           test "$(modinfo -F vermagic gpu_unlock.ko | cut -d' ' -f1)" = "$kver"
           modinfo -F firmware gpu_unlock.ko | grep -q 'gpu-unlock/'
           test "$(find "firmware/gpu-unlock/$NV" -name '*.bin' | wc -l)" -eq \
-            "$(grep -c 'MODULE_FIRMWARE(' ../../../../kernel/gpu_unlock/firmware_610.c)"
+            "$(grep -c 'MODULE_FIRMWARE(' ../../../../kernel/gpu_unlock/firmware.c)"
           test -f "firmware/gpu-unlock/$NV/gsp_ga10x.bin"
           test -f "firmware/gpu-unlock/$NV/booter_load_tu102.bin"
           test -s NVIDIA-LICENSE

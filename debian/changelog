@@ -1,3 +1,21 @@
+gpu-unlock (3.0.0) UNRELEASED; urgency=medium
+
+  * Merge the upstream 3.0.0-beta line: CMP 170HX compute, PCIe Gen2, BAR1 and
+    peer-to-peer support, ECC and VBIOS registry overrides delivered before the
+    driver binds, GDDR and HBM temperatures over hwmon, an HBM clock governor
+    and the GA100 and A100 power and core-clock ranges, unlocks restored at
+    device resume, and release snapshots and DKMS sources restricted to an
+    explicit file list.
+  * The module source is no longer suffixed by the pinned driver version: the
+    per-version files are unlock.c, firmware.c, layout.c, prep.c and vbios.c,
+    and the transaction is split across host, memory, vram, vpr, fuses,
+    inforom, overrides, pcie, pm and hbm.
+  * Load gpu_unlock ahead of nvidia with a modprobe softdep in every
+    initramfs, which replaces the load-order drop-in naming and the
+    init-premount script.
+
+ -- Zagitta <zetlon+github@gmail.com>  Sun, 22 Nov 2026 00:00:00 +0000
+
 gpu-unlock (2.5.0) UNRELEASED; urgency=medium
 
   * Carry the laptop SKUs the field measured, each one line in the card table

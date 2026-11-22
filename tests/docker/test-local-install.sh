@@ -38,6 +38,12 @@ test -f "/usr/src/gpu-unlock-$v/dkms.conf"
 test -f /usr/lib/firmware/gpu-unlock/610.43.03/gsp_ga10x.bin
 test -f /usr/lib/firmware/gpu-unlock/610.43.03/booter_load_tu102.bin
 test -f /usr/share/licenses/gpu-unlock-firmware/NVIDIA-LICENSE
+# The override helpers, their modprobe drop-in and the generator's hook are
+# what deliver the VBIOS registry keys before nvidia binds.
+test -x /usr/lib/gpu-unlock/prepare-overrides
+test -x /usr/lib/gpu-unlock/apply-procfs-override
+test -f /usr/lib/modprobe.d/gpu-unlock.conf
+test -f /usr/share/initramfs-tools/hooks/gpu-unlock-overrides
 # Debian's depmod.d compresses installed modules, so DKMS leaves gpu_unlock.ko.xz.
 if dkms status | grep -q "gpu-unlock/$v, $k,.*: installed"; then
 	echo dkms:installed
@@ -68,9 +74,14 @@ test ! -e /usr/share/licenses/gpu-unlock
 test ! -e /usr/share/doc/gpu-unlock/README.md
 test ! -e /usr/share/initramfs-tools/modules.d/gpu-unlock.conf
 test ! -e /usr/share/initramfs-tools/scripts/init-top/gpu-unlock
-test ! -e /usr/share/initramfs-tools/hooks/gpu-unlock
-test ! -e /usr/share/initramfs-tools/scripts/init-premount/gpu-unlock
-test ! -e /usr/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
+test ! -e /usr/share/initramfs-tools/hooks/gpu-unlock-overrides
+test ! -e /usr/lib/dracut/dracut.conf.d/gpu-unlock.conf
+test ! -e /usr/lib/dracut/modules.d/91gpu-unlock-overrides
+test ! -e /usr/lib/gpu-unlock/prepare-overrides
+test ! -e /usr/lib/gpu-unlock/apply-procfs-override
+test ! -e /usr/lib/modprobe.d/gpu-unlock.conf
+test ! -e /usr/lib/systemd/system/gpu-unlock-overrides.service
+test ! -e /usr/lib/firmware/nvidia/gpu-unlock
 if dkms status | grep -q gpu-unlock; then
 	echo "dkms left registered" >&2
 	dkms status >&2

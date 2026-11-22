@@ -17,6 +17,12 @@ package|local)
 	mounts="-v $(realpath "$INPUTS"):/inputs:ro" ;;
 esac
 commit=$(packaging/snapshot.sh)
+gitdir=$(git rev-parse --path-format=absolute --git-common-dir)
+# The packager-free test installs the working checkout, not the snapshot,
+# so it needs the tree itself and not only the object store.
+if [ "$job" = local ]; then
+	mounts="$mounts -v $(pwd):/src:ro"
+fi
 if [ $# -eq 0 ]; then
 	if [ "$job" = local ]; then
 		set -- debian:13
@@ -50,7 +56,7 @@ if [ "$2" = local ]; then
 	cd /src
 	SRC=/src INPUTS=/inputs sh tests/docker/test-local-install.sh "$1"
 else
-	git clone -q --shared /src /work
+	git clone -q --shared /git /work
 	cd /work
 	git checkout -q "$1"
 	case "$2" in
@@ -68,7 +74,7 @@ failed=
 for image; do
 	echo "==> $image"
 	# shellcheck disable=SC2086
-	docker run --rm -v "$PWD:/src:ro" $mounts "$image" \
+	docker run --rm -v "$gitdir:/git:ro" $mounts "$image" \
 		sh -euc "$script" sh "$commit" "$job" || failed="$failed $image"
 done
 [ -z "$failed" ] || { echo "failed:$failed" >&2; exit 1; }

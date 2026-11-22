@@ -1,47 +1,47 @@
 // SPDX-License-Identifier: GPL-2.0-only
+#ifdef __KERNEL__
+#include <linux/kernel.h>
+#include <linux/slab.h>
+#include <linux/string.h>
+#else
+/* The host test builds the recipe table out of this file, so the allocator and
+ * the kernel arithmetic gu_recipe_prepare() uses get a userspace stand-in. */
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
+#define roundup(x, y) ((((x) + ((y) - 1)) / (y)) * (y))
+#define GFP_KERNEL 0
+static inline void *kcalloc(size_t n, size_t size, int flags)
+{
+	(void)flags;
+	return calloc(n, size);
+}
+#endif
+
 #include "recipes.h"
 #include "registers.h"
 
-/* GA102 re-entrant call table. The Booter dispatches the frame RET into
- * these gadgets and performs the privileged writes from the value/address
- * slots. Offsets are relative to the signature image, not to BAR0.
- *
- * The write entry point and the six-write frame layout are Petri Krohn's:
- * enter reg_write_indirect() at 0x1110 with the address in r0 and the value in
- * r1, so the 0x1fce parameter shuffle is unnecessary. Skipping the prologue
- * also means r3 must already point at a word equal to r9 for the 0x1149 canary
- * check (0x6140 works: it holds the same canary); otherwise 0x811b stores 0x47
- * to I[0x1000] and spins. The skipped prologue also moves the epilogue frame:
- * 0x1156 pops r3..r0 from [sp..sp+0xc], skips the canary slot at sp+0x10 and
- * returns via sp+0x14, so one write consumes 0x18 bytes and the popped r0/r1
- * carry the next write's parameters.
- *
- * Stack: writes start at 0xff54, one 0x18 frame each. Cleanup starts at
- * 0xff54 + 6*0x18 = 0xffe4: 0x576b (SE/CSB handshake, data pointer derived
- * from sp) leaves r0=3, 0x84c8 turns that into r10=3 while r11's low byte is
- * already 0, then 0xd52 and the 0x81ee exit. The final return word is at
- * 0xfff4; a seventh write would need 0x1000c. The driver batches the family's
- * write table into launches of six and repeats the last entry to fill. */
+/* GA102 six-write call table. Offsets are relative to the signature image. */
 static const struct gu_payload_word ga102_words[] = {
 	{ 0x1100, 0x00000007 },
-	{ 0xf93c, 0x00006140 },	/* 0x686 pop: r3 canary pointer, write 1 */
-	{ 0xf950, 0x00001110 },	/* write 1: r0=address, r1=value */
-	{ 0xf954, 0x00006140 },	/* frame 1: r3 for write 2 */
-	{ 0xf968, 0x00001110 },	/* frame 1: ret -> write 2 */
-	{ 0xf96c, 0x00006140 },	/* frame 2: r3 for write 3 */
-	{ 0xf980, 0x00001110 },	/* frame 2: ret -> write 3 */
-	{ 0xf984, 0x00006140 },	/* frame 3: r3 for write 4 */
-	{ 0xf998, 0x00001110 },	/* frame 3: ret -> write 4 */
-	{ 0xf99c, 0x00006140 },	/* frame 4: r3 for write 5 */
-	{ 0xf9b0, 0x00001110 },	/* frame 4: ret -> write 5 */
-	{ 0xf9b4, 0x00006140 },	/* frame 5: r3 for write 6 */
-	{ 0xf9c8, 0x00001110 },	/* frame 5: ret -> write 6 */
-	{ 0xf9cc, 0x00006140 },	/* frame 6: r3 (unused by cleanup) */
-	{ 0xf9d8, 0x00000003 },	/* frame 6: r0 = 3 for 0xd52 */
-	{ 0xf9e0, 0x0000576b },	/* frame 6: ret -> SE/CSB handshake */
-	{ 0xf9e4, 0x000084c8 },	/* cleanup: r10 = r0 = 3, ret 0xd52 */
-	{ 0xf9f0, 0x00000d52 },	/* cleanup: final pass */
-	{ 0xf9f4, 0x000081ee },	/* HS clean exit */
+	{ 0xf93c, 0x00006140 },	/* signature frame r3 */
+	{ 0xf950, 0x00001110 },	/* signature ret -> write 1 */
+	{ 0xf954, 0x00006140 },
+	{ 0xf968, 0x00001110 },	/* write 1 ret -> write 2 */
+	{ 0xf96c, 0x00006140 },
+	{ 0xf980, 0x00001110 },	/* write 2 ret -> write 3 */
+	{ 0xf984, 0x00006140 },
+	{ 0xf998, 0x00001110 },	/* write 3 ret -> write 4 */
+	{ 0xf99c, 0x00006140 },
+	{ 0xf9b0, 0x00001110 },	/* write 4 ret -> write 5 */
+	{ 0xf9b4, 0x00006140 },
+	{ 0xf9c8, 0x00001110 },	/* write 5 ret -> write 6 */
+	{ 0xf9cc, 0x00006140 },	/* write 6 frame r3 */
+	{ 0xf9d4, 0x00000000 },	/* write 6 epilogue r1 (unused) */
+	{ 0xf9d8, 0x00000000 },	/* write 6 epilogue r0 (unused) */
+	{ 0xf9e0, 0x000085d0 },	/* write 6 ret -> plain ret */
+	{ 0xf9e4, 0x00008445 },	/* -> booter release/completion, sp=0xffe8 */
 };
 static const struct gu_payload_slot ga102_slots[] = {
 	{ 0xf944, 0xf948 },
@@ -51,38 +51,87 @@ static const struct gu_payload_slot ga102_slots[] = {
 	{ 0xf9a4, 0xf9a8 },
 	{ 0xf9bc, 0xf9c0 },
 };
-#define GU_PAYLOAD_V67(label) {					\
-	.name = label,						\
-	.size = 0xfa00,						\
-	.fill = 0x0000019c,					\
-	.slots = ga102_slots,				\
-	.writes = sizeof(ga102_slots) / sizeof(ga102_slots[0]), \
-	.words = ga102_words,				\
-	.word_count = sizeof(ga102_words) / sizeof(ga102_words[0]), \
-	.completion = GU_PAYLOAD_HALT_RESET_PLM,		\
-}
 
-static const struct gu_payload ga102_v67 = GU_PAYLOAD_V67("ga102-v67");
-/* No payload has been derived for the GA100 signed Booter yet; it reuses the
- * GA102 V67 body until one is. Replace the descriptor when it lands. */
-static const struct gu_payload ga100_v67 = GU_PAYLOAD_V67("ga100-v67");
+static const struct gu_payload ga102_payload = {
+	.name = "ga102",
+	.size = 0xf9f4,
+	.slots = ga102_slots,
+	.writes = sizeof(ga102_slots) / sizeof(ga102_slots[0]),
+	.words = ga102_words,
+	.word_count = sizeof(ga102_words) / sizeof(ga102_words[0]),
+	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
+};
 
-/* AD102 port of Petri Krohn's GA102 six-write chain. The two signed Booters
- * are the same code with functions moved, so the GA102 gadgets map one-for-one
- * through the fwmap: the signature epilogue 0x686 -> 0x1e02, the write entry
- * 0x1110 -> 0x257e, the 0x84c8 gadget -> 0x7a02 and the HS exit
- * 0x81ee -> 0x771e. The canary global moves 0x6140 -> 0x5f50, while the DMEM
- * frame layout is unchanged: the signature epilogue still starts at 0xff30,
- * so the six 0x18-byte write frames and their slots use the same offsets.
- *
- * The GA102 cleanup starts with the 0x576b status read at CSB address 0x114;
- * AD102 has no exact counterpart for that function (the fwmap's fuzzy 0x73ec
- * match performs a different table read), so the port keeps the AD102
- * booter's own proven marker exit from the TOTORONG/AD103 chain:
- * 0x7a02 moves the marker 0x67b00001 into r10, 0x31b5 publishes it to
- * I[0x1000], and 0x771e exits. That matches this payload's MARKER completion
- * and leaves the final return at 0xfff0. */
-static const struct gu_payload_slot ad102_v67_slots[] = {
+/* GA100 six-write chain. The first two writes use the re-entrant 0x10b9
+ * engine and the proven refire cleanup, which releases the SE mutex while the
+ * booter's DIC entry is still live. The 0xccb return is then redirected to a
+ * -0x1344 stack pivot (0x7934), a +0x38 pivot (0x717), and the 0x8fe reload
+ * gadget, which seeds r3=0x6340 and the third write's parameters from a lower
+ * frame at 0xED14. The last four writes land there and exit through 0x7f2f.
+ * Slots 3 and 4 move to 0xE504/0xE508 and 0xE520/0xE524 so they do not overlap
+ * the first pair's standard stack frames. The image is otherwise zero, so the
+ * 0xF800 signature DMA overwrites the booter's per-boot TRNG guard at 0x6340
+ * (image 0x5B40) and every saved canary copy with the same zero; the guard
+ * checks then compare 0 == 0. On hardware 0x6340 is a random canary before
+ * that DMA, not zero. */
+static const struct gu_payload_word ga100_words[] = {
+	{ 0x1100, 0x00000007 },
+	{ 0xe4bc, 0x00000717 },	/* -0x1344 pivot lands here; B pivot */
+	{ 0xe4d0, 0x00006340 },	/* 0x717 r3 pop */
+	{ 0xe4f4, 0x000008fe },	/* 0x717 ret -> 0x8fe reload */
+	{ 0xe4fc, 0x00006340 },	/* reload r3 */
+	{ 0xe514, 0x000010b9 },	/* reload ret -> write 3 */
+	{ 0xe518, 0x00006340 },	/* write 3 frame r3 */
+	{ 0xe52c, 0x000010b9 },	/* write 3 ret -> write 4 */
+	{ 0xe530, 0x00006340 },	/* write 4 frame r3 */
+	{ 0xe544, 0x000010b9 },	/* write 4 ret -> write 5 */
+	{ 0xe548, 0x00006340 },	/* write 5 frame r3 */
+	{ 0xe55c, 0x000010b9 },	/* write 5 ret -> write 6 */
+	{ 0xe560, 0x00006340 },	/* write 6 frame r3 */
+	{ 0xe574, 0x00007f2f },	/* write 6 exit */
+	{ 0xf748, 0x00006340 },	/* write 1 frame r3 */
+	{ 0xf75c, 0x000010b9 },	/* write 1 ret -> write 2 */
+	{ 0xf760, 0x00006340 },	/* write 2 frame r3 */
+	{ 0xf774, 0x000010b9 },	/* write 2 ret -> write 3 */
+	{ 0xf778, 0x00006340 },	/* frame 3 r3 */
+	{ 0xf78c, 0x0000815a },	/* refire cleanup entry */
+	{ 0xf790, 0x00008e18 },	/* cleanup block address */
+	{ 0xf794, 0x00000000 },
+	{ 0xf798, 0x0000815a },
+	{ 0xf79c, 0x00000000 },
+	{ 0xf7a0, 0x00000000 },
+	{ 0xf7a4, 0x00001fbd },
+	{ 0xf7b0, 0x0000ffbc },
+	{ 0xf7b8, 0x0000582d },
+	{ 0xf7c4, 0x00000000 },
+	{ 0xf7c8, 0x00000cbd },
+	{ 0xf7d8, 0x00000003 },
+	{ 0xf7e0, 0x00001fbd },
+	{ 0xf7f4, 0x00000ccb },
+	{ 0xf7f8, 0x00007934 },	/* cleanup return -> -0x1344 pivot */
+};
+static const struct gu_payload_slot ga100_slots[] = {
+	{ 0xf750, 0xf754 },
+	{ 0xf768, 0xf76c },
+	{ 0xe504, 0xe508 },
+	{ 0xe520, 0xe524 },
+	{ 0xe538, 0xe53c },
+	{ 0xe550, 0xe554 },
+};
+static const struct gu_payload ga100_payload = {
+	.name = "ga100",
+	.size = 0xf800,
+	.slots = ga100_slots,
+	.writes = sizeof(ga100_slots) / sizeof(ga100_slots[0]),
+	.words = ga100_words,
+	.word_count = sizeof(ga100_words) / sizeof(ga100_words[0]),
+	.completion = GU_PAYLOAD_HALT_RESET_PLM,
+};
+
+/* AD102 uses the same six write frames as GA102, with relocated gadgets.
+ * The final frame's saved r0/r1 are unused by the normal completion path;
+ * leave them zero instead of baking a FEAT permission opening into them. */
+static const struct gu_payload_slot ad102_slots[] = {
 	{ 0xf944, 0xf948 },
 	{ 0xf95c, 0xf960 },
 	{ 0xf974, 0xf978 },
@@ -90,90 +139,86 @@ static const struct gu_payload_slot ad102_v67_slots[] = {
 	{ 0xf9a4, 0xf9a8 },
 	{ 0xf9bc, 0xf9c0 },
 };
-static const struct gu_payload_word ad102_v67_words[] = {
+static const struct gu_payload_word ad102_words[] = {
 	{ 0x1100, 0x00000007 },
-	{ 0xf93c, 0x00005f50 },	/* 0x1e02 pop: r3 canary pointer, write 1 */
-	{ 0xf950, 0x0000257e },	/* write 1: r0=address, r1=value */
-	{ 0xf954, 0x00005f50 },	/* frame 1: r3 for write 2 */
-	{ 0xf968, 0x0000257e },	/* frame 1: ret -> write 2 */
-	{ 0xf96c, 0x00005f50 },	/* frame 2: r3 for write 3 */
-	{ 0xf980, 0x0000257e },	/* frame 2: ret -> write 3 */
-	{ 0xf984, 0x00005f50 },	/* frame 3: r3 for write 4 */
-	{ 0xf998, 0x0000257e },	/* frame 3: ret -> write 4 */
-	{ 0xf99c, 0x00005f50 },	/* frame 4: r3 for write 5 */
-	{ 0xf9b0, 0x0000257e },	/* frame 4: ret -> write 5 */
-	{ 0xf9b4, 0x00005f50 },	/* frame 5: r3 for write 6 */
-	{ 0xf9c8, 0x0000257e },	/* frame 5: ret -> write 6 */
-	{ 0xf9cc, 0x00005f50 },	/* frame 6: r3 (unused by cleanup) */
-	{ 0xf9d8, 0x67b00001 },	/* frame 6: r0 = completion marker */
-	{ 0xf9e0, 0x00007a02 },	/* frame 6: ret -> marker gadget */
-	{ 0xf9ec, 0x000031b5 },	/* marker gadget: publish I[0x1000] */
-	{ 0xf9f0, 0x0000771e },	/* HS clean exit */
+	{ 0xf93c, 0x00005f50 },
+	{ 0xf950, 0x0000257e },
+	{ 0xf954, 0x00005f50 },
+	{ 0xf968, 0x0000257e },
+	{ 0xf96c, 0x00005f50 },
+	{ 0xf980, 0x0000257e },
+	{ 0xf984, 0x00005f50 },
+	{ 0xf998, 0x0000257e },
+	{ 0xf99c, 0x00005f50 },
+	{ 0xf9b0, 0x0000257e },
+	{ 0xf9b4, 0x00005f50 },
+	{ 0xf9c8, 0x0000257e },
+	{ 0xf9cc, 0x00005f50 },
+	{ 0xf9e0, 0x00007b0a },
+	{ 0xf9e4, 0x0000797f },
 };
-static const struct gu_payload ad102_v67 = {
-	.name = "ad102-v67",
-	.size = 0xfa00,
-	.fill = 0x0000019c,
-	.slots = ad102_v67_slots,
-	.writes = sizeof(ad102_v67_slots) / sizeof(ad102_v67_slots[0]),
-	.words = ad102_v67_words,
-	.word_count = sizeof(ad102_v67_words) / sizeof(ad102_v67_words[0]),
-	.completion = GU_PAYLOAD_HALT_RESET_PLM_MARKER,
-	.marker = 0x67b00001,
+static const struct gu_payload ad102_payload = {
+	.name = "ad102",
+	.size = 0xf9f4,
+	.slots = ad102_slots,
+	.writes = sizeof(ad102_slots) / sizeof(ad102_slots[0]),
+	.words = ad102_words,
+	.word_count = sizeof(ad102_words) / sizeof(ad102_words[0]),
+	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
 };
 
-/* TU10x two-write chain, from nlzy/turing-unlock (generate_v67.py, payload
- * SHA-256 b0ec9029...). The GA102 six-write port above spun at 0x7bbc with
- * MAILBOX0=0x47 on Turing: this Booter's cleanup must release ACR mutex 3,
- * which the 0x6521/0x7f27/0xccb exit never does. Here the two writes go
- * through 0x10b9 as before, then 0xcbd, 0x8e18, 0xc95, 0x1f89 (twice, with a
- * real token read at main_sp + 0xf) and 0xe85 release the mutex and 0x7ea4
- * returns through the Booter's normal finalize path, publishing MAILBOX0=0.
- * Offsets are DMEM - 0x600, as in the other payloads; 0x6140 is the canary.
- * Confirmed on TU102 (2080 Ti), TU104 (2080, 2070 SUPER) and TU106 (2060
- * 6 GB, 2060 12 GB), Zagitta/gpu-unlock#242. */
+/* TU102 port of the refire chain.  The GA100/TU102 Booters are the same
+ * code with functions moved; fwmap gives a one-for-one mapping for every
+ * gadget used here: write entry 0x10b9, cleanup epilogue 0x815a -> 0x7f27,
+ * bounce 0x1fbd -> 0x1f8b, CSB read entry 0x582d -> 0x653f, read epilogue
+ * 0xcbd -> 0xcbd and release 0xccb -> 0xccb.  The guard moves 0x6340 ->
+ * 0x6140.
+ *
+ * Six write frames exit through Turing's normal mutex release/completion.
+ * The signature DMA clears the guard at 0x6140 and every saved copy, so the
+ * guard checks compare 0 == 0.
+ *
+ * TU116 is one word away from this image and is deliberately not carried: its
+ * self-loop park sits at 0x7e9a where TU102 has it at 0x7ea4, so a TU116 card
+ * handed this payload parks on a word of fill and never finalises, which is the
+ * MAILBOX0 0x31 stall (the nonsecure stub ran, the secure entry never did).
+ * With its own Booter the whole transaction completes and the stock driver then
+ * refuses the card ("unexpected WPR2 already up, cannot proceed with booting
+ * GSP", RmInitAdapter 0x62:0x40:2119), identically on 580.178.04 and on
+ * 610.43.03, measured on one card in one boot. TU116 has no tensor cores, so a
+ * 16 series card has nothing to win; the 2.5.0 tag carries the derived TU116
+ * Booter, payload and family. */
 static const struct gu_payload_slot tu102_slots[] = {
-	{ 0xf940, 0xf944 },	/* write 1 */
-	{ 0xf958, 0xf95c },	/* write 2 */
+	{ 0xf940, 0xf944 },
+	{ 0xf958, 0xf95c },
+	{ 0xf970, 0xf974 },
+	{ 0xf988, 0xf98c },
+	{ 0xf9a0, 0xf9a4 },
+	{ 0xf9b8, 0xf9bc },
 };
 static const struct gu_payload_word tu102_words[] = {
 	{ 0x1100, 0x00000007 },
-	{ 0xf938, 0x00006140 },	/* r3 canary pointer, write 1 */
-	{ 0xf94c, 0x000010b9 },	/* write 1: r0=address, r1=value */
-	{ 0xf950, 0x00006140 },	/* frame 1: r3 for write 2 */
-	{ 0xf964, 0x000010b9 },	/* frame 1: ret -> write 2 */
-	{ 0xf968, 0x00006140 },	/* frame 2: r3 */
-	{ 0xf974, 0x00000000 },
-	{ 0xf97c, 0x00000cbd },	/* frame 2: ret -> mutex release chain */
-	{ 0xf980, 0x00000001 },
-	{ 0xf984, 0x00000000 },
-	{ 0xf988, 0x00008e18 },
-	{ 0xf98c, 0x00000000 },
-	{ 0xf994, 0x00000c95 },
+	{ 0xf938, 0x00006140 },	/* signature frame r3 */
+	{ 0xf94c, 0x000010b9 },	/* signature ret -> write 1 */
+	{ 0xf950, 0x00006140 },
+	{ 0xf964, 0x000010b9 },	/* write 1 ret -> write 2 */
+	{ 0xf968, 0x00006140 },
+	{ 0xf97c, 0x000010b9 },	/* write 2 ret -> write 3 */
+	{ 0xf980, 0x00006140 },
+	{ 0xf994, 0x000010b9 },	/* write 3 ret -> write 4 */
 	{ 0xf998, 0x00006140 },
-	{ 0xf99c, 0x00000000 },
-	{ 0xf9a0, 0x00000000 },
-	{ 0xf9a4, 0x00000001 },
-	{ 0xf9ac, 0x00001f89 },
+	{ 0xf9ac, 0x000010b9 },	/* write 4 ret -> write 5 */
 	{ 0xf9b0, 0x00006140 },
-	{ 0xf9b4, 0x00006140 },
-	{ 0xf9b8, 0x0000ffff },	/* token: main_sp 0xfff0 + 0xf */
-	{ 0xf9c0, 0x00001f89 },
-	{ 0xf9c4, 0x00006140 },
-	{ 0xf9c8, 0x00006140 },
-	{ 0xf9cc, 0x00000000 },
-	{ 0xf9d4, 0x00000e85 },	/* ACR mutex 3 release */
-	{ 0xf9d8, 0x00001f89 },
-	{ 0xf9dc, 0x00006140 },
-	{ 0xf9e0, 0x00006140 },
-	{ 0xf9e4, 0x00000000 },
-	{ 0xf9ec, 0x00007ea4 },	/* normal main handoff */
-	{ 0xf9f8, 0x00000000 },	/* main_sp + 0x08 */
+	{ 0xf9c4, 0x000010b9 },	/* write 5 ret -> write 6 */
+	{ 0xf9c8, 0x00006140 },	/* write 6 frame r3 */
+	{ 0xf9d0, 0x00000000 },	/* write 6 epilogue r1 (unused) */
+	{ 0xf9d4, 0x00000000 },	/* write 6 epilogue r0 (unused) */
+	{ 0xf9dc, 0x0000802f },	/* write 6 ret -> plain ret */
+	{ 0xf9e0, 0x00007ea4 },	/* -> booter release/completion, sp=0xffe4 */
 };
-static const struct gu_payload tu102_v67 = {
-	.name = "tu102-v67-2w",
-	.size = 0xfa00,
-	.fill = 0x000004a7,
+static const struct gu_payload tu102_payload = {
+	.name = "tu102",
+	.size = 0xf9f0,
 	.slots = tu102_slots,
 	.writes = sizeof(tu102_slots) / sizeof(tu102_slots[0]),
 	.words = tu102_words,
@@ -181,122 +226,257 @@ static const struct gu_payload tu102_v67 = {
 	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
 };
 
-/* TU116's copy of that image, ported from nv-uefi-unlocker's tu11x route (its
- * issue #151, payload SHA-256 c79208ac...), and one word away from the TU10x
- * image above. Every referenced entry site of the TU10x chain was checked
- * against the decrypted TU116 debug secure segment (key family #6): 0x10b9,
- * 0x1f89 and 0xc95 byte-identical, 0xcbd and 0xe85 entry-identical (only the
- * in-function lcall immediates differ, on bytes this payload never executes),
- * the 0x6140 canary address identical, DMEM data segments 176 of 25344 bytes
- * apart. The one site that moved is the main handoff park: TU116's self-loop
- * sits at 0x7e9a where TU102 has it at 0x7ea4, so a TU116 card handed the
- * TU10x image parks on a word of fill and never finalises, which is the
- * MAILBOX0 0x31 stall recorded at the family. Field-proven on that card: the
- * Booter halts and both writes read back as built; see the family note for what
- * that leaves broken. */
-static const struct gu_payload_word tu116_words[] = {
-	{ 0x1100, 0x00000007 },
-	{ 0xf938, 0x00006140 },	/* r3 canary pointer, write 1 */
-	{ 0xf94c, 0x000010b9 },	/* write 1: r0=address, r1=value */
-	{ 0xf950, 0x00006140 },	/* frame 1: r3 for write 2 */
-	{ 0xf964, 0x000010b9 },	/* frame 1: ret -> write 2 */
-	{ 0xf968, 0x00006140 },	/* frame 2: r3 */
-	{ 0xf974, 0x00000000 },
-	{ 0xf97c, 0x00000cbd },	/* frame 2: ret -> mutex release chain */
-	{ 0xf980, 0x00000001 },
-	{ 0xf984, 0x00000000 },
-	{ 0xf988, 0x00008e18 },
-	{ 0xf98c, 0x00000000 },
-	{ 0xf994, 0x00000c95 },
-	{ 0xf998, 0x00006140 },
-	{ 0xf99c, 0x00000000 },
-	{ 0xf9a0, 0x00000000 },
-	{ 0xf9a4, 0x00000001 },
-	{ 0xf9ac, 0x00001f89 },
-	{ 0xf9b0, 0x00006140 },
-	{ 0xf9b4, 0x00006140 },
-	{ 0xf9b8, 0x0000ffff },	/* token: main_sp 0xfff0 + 0xf */
-	{ 0xf9c0, 0x00001f89 },
-	{ 0xf9c4, 0x00006140 },
-	{ 0xf9c8, 0x00006140 },
-	{ 0xf9cc, 0x00000000 },
-	{ 0xf9d4, 0x00000e85 },	/* ACR mutex 3 release */
-	{ 0xf9d8, 0x00001f89 },
-	{ 0xf9dc, 0x00006140 },
-	{ 0xf9e0, 0x00006140 },
-	{ 0xf9e4, 0x00000000 },
-	{ 0xf9ec, 0x00007e9a },	/* normal main handoff, TU116 lbra site */
-	{ 0xf9f8, 0x00000000 },	/* main_sp + 0x08 */
+/* Selectors are written at level 3; their default PLMs already admit SEC2.
+ * Host access is read-only, so no FEAT permission opening is needed. */
+static const struct gu_feature_layout ampere_features = {
+	.plm = GU_FEAT_PLM_OFFSET,
+	.ss0 = GU_FEAT_SS0_OFFSET, .ss1 = GU_FEAT_SS1_OFFSET,
+	.readout = GU_FEAT_READOUT_1_OFFSET,
+	.ecc = GU_FEAT_ECC_0_OFFSET, .ecc_readout = GU_FEAT_ECC_READOUT_OFFSET,
 };
-static const struct gu_payload tu116_v67 = {
-	.name = "tu116-v67-2w",
-	.size = 0xfa00,
-	.fill = 0x000004a7,
-	.slots = tu102_slots,
-	.writes = sizeof(tu102_slots) / sizeof(tu102_slots[0]),
-	.words = tu116_words,
-	.word_count = sizeof(tu116_words) / sizeof(tu116_words[0]),
-	.completion = GU_PAYLOAD_HALT_RESET_PLM_ZERO,
+static const struct gu_feature_layout turing_features = {
+	.plm = GU_TU102_FEAT_PLM_OFFSET,
+	.ss0 = GU_TU102_FEAT_SS0_OFFSET, .ss1 = GU_TU102_FEAT_SS1_OFFSET,
+	.readout = GU_TU102_FEAT_READOUT_OFFSET,
+	.ecc = GU_TU102_FEAT_ECC_OFFSET,
+	.ecc_readout = GU_TU102_FEAT_ECC_READOUT_OFFSET,
 };
 
-/* Turing's FEAT aperture is at 0x409650: opening it lets the host write the
- * SS0/SS1 selectors. WPR_CFG_PLM is never opened to the host on Turing, so
- * the host cannot clear WPR2 itself (restore_frts() is skipped): the chain's
- * second write clears WPR2_ADDR_HI, which the stock driver requires at 0. */
-static const struct gu_reg_write tu102_plm[] = {
-	{ GU_TU102_FEAT_PLM_OFFSET, 0xffffffff },
-	{ GU_WPR2_ADDR_HI_OFFSET,   0x00000000 },
+static const struct gu_reg_write ampere_selectors[] = {
+	GU_WRITE(GU_FEAT_SS0_OFFSET, GU_SS0_UNLOCK),
+	GU_WRITE(GU_FEAT_SS1_OFFSET, GU_SS1_UNLOCK),
 };
-static const struct gu_reg_write tu102_selectors[] = {
-	{ GU_TU102_FEAT_SS0_OFFSET, GU_SS0_UNLOCK },
-	{ GU_TU102_FEAT_SS1_OFFSET, GU_SS1_UNLOCK },
+static const struct gu_reg_write turing_selectors[] = {
+	GU_WRITE(GU_TU102_FEAT_SS0_OFFSET, GU_SS0_UNLOCK),
+	GU_WRITE(GU_TU102_FEAT_SS1_OFFSET, GU_SS1_UNLOCK),
 };
 
-/* Same per-entry image as GA10x. These are the stores, in order. The FBPA
- * store is attempted by the signed chain but hardware leaves the field at its
- * pre-existing value, so it is optional for the readback gate. */
-static const struct gu_reg_write ad102_plm[] = {
-	{ GU_WPR_CFG_PLM_OFFSET,	0xfffff0ff },
-	{ GU_FBPA_PLM_OFFSET,		0xffffffff, 0xffffff0f, true },
-	{ GU_WPR_PLM_OFFSET, 		0xffffffff },
-	{ GU_FEAT_PLM_OFFSET, 		0xffffffff },
+/* Shared Ampere/Ada workaround. Install match/data before arming trap 30. */
+static const struct gu_reg_write p2p_privileged[] = {
+	GU_WRITE(GU_P2P_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_P2P_TRAP_PLM_OFFSET, 0xfffffb9f),
+	GU_WRITE(GU_P2P_TRAP_MATCH_OFFSET, GU_P2P_SECURE_OFFSET),
+	GU_WRITE(GU_P2P_TRAP_MASK_OFFSET, 0xfc000000),
+	GU_WRITE(GU_P2P_TRAP_DATA1_OFFSET, 0),
+	GU_WRITE(GU_P2P_TRAP_DATA2_OFFSET, 0),
+	GU_WRITE(GU_P2P_TRAP_CFG_OFFSET, 0x3c060),
+	GU_WRITE(GU_P2P_TRAP_ACTION_OFFSET, 0x11),
 };
 
-/* Only the masks needed by the GA10x compute recipe. */
-static const struct gu_reg_write ga10x_plm[] = {
-	{ GU_WPR_CFG_PLM_OFFSET, 	0xfffff0ff },
-	{ GU_FEAT_PLM_OFFSET,    	0xffffffff },
+/* Only host memory bookkeeping and scrub need permission openings.
+ * The actual mode writes execute at level 3 under the default permissions. */
+static const struct gu_reg_write gddr_ecc_prepare[] = {
+	GU_WRITE(GU_WPR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_MMU_LOCK_CFG_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_GFW_FB_SIZE_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_MEMORY_RANGE_MIRROR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_VPR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_VPR_BOOT_HANDOFF_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_DISPLAY_VPR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_NISO_SCRUB_PLM_OFFSET, 0xffffffff),
+};
+static const struct gu_reg_write turing_ecc_prepare[] = {
+	/* Turing shares one gate for local range, MMU_LOCK and VPR. */
+	GU_WRITE(GU_TU102_MMU_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_MEMORY_RANGE_MIRROR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_VPR_BOOT_HANDOFF_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_DISPLAY_VPR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_NISO_SCRUB_PLM_OFFSET, 0xffffffff),
 };
 
-/* cmpunlocker 2d10f891, sec2-postbl-plm-ss-cfg.patch, plmTable.
- * Order and WPR_CFG's source-control bits are significant. No geometry,
- * link retraining, ECC or GPC/TPC configuration is performed in Stage 1.
+/* DRAM and L2 ECC must change together in the final launch. The feature
+ * override address is selected from the family's layout when copied. */
+static const struct gu_reg_write gddr_ecc_enable[] = {
+	GU_WRITE_MASK(GU_FEAT_ECC_0_OFFSET, 0x99000, ~0x99000u, 0x99000),
+	GU_WRITE_MASK(GU_FB_L2_ECC_CONFIG_OFFSET, 1, ~1u, 1),
+	GU_WRITE_MASK(GU_L2_DATA_CONFIG_OFFSET, 0x11, ~0x11u, 0x11),
+	GU_WRITE_MASK(GU_L2_INPUT_QUEUE_CONFIG_OFFSET, 1, ~1u, 1),
+};
+
+static const struct gu_reg_write ga100_hbm_access[] = {
+	GU_WRITE(GU_FBPA_CONFIG_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_FBPA_HBMPLL_PLM_OFFSET, 0xffffffff),
+};
+
+/* cmpunlocker 2d10f891, sec2-postbl-plm-ss-cfg.patch, plmTable, then the
+ * PLMs pcie-gen2.patch and ecc-enable.patch open. Ordinary configuration follows here;
+ * PCIe retraining and BAR1 resize retain their own write sequences. cmpunlocker
+ * carries on when the later PLMs do not read back, so they are optional here.
  */
-static const struct gu_reg_write ga100_plm[] = {
-	{ GU_WPR_CFG_PLM_OFFSET,   	0xfffff0ff },
-	{ GU_FBPA_PLM_OFFSET,      	0xffffffff },
-	{ GU_WPR_PLM_OFFSET,       	0xffffffff },
-	{ GU_FEAT_PLM_OFFSET,      	0xffffffff },
-	{ GU_XVE_PLM_OFFSET,       	0xffffffff },
-	{ GU_XVE_B_PLM_OFFSET,     	0xffffffff },
-	{ GU_XVE_C_PLM_OFFSET,     	0xffffffff },
-	{ GU_FEAT2_PLM_OFFSET,     	0xffffffff },
-	{ GU_OPT_PLM_OFFSET,       	0xffffffff },
-	{ GU_RECONFIG_PLM_OFFSET,  	0xffffffff },
-	{ GU_PJTAG_PLM_OFFSET,     	0xffffffff },
-	{ GU_PJTAG_SEC_PLM_OFFSET, 	0xffffffff },
+static const struct gu_reg_write ga100_privileged[] = {
+	GU_WRITE(GU_FBPA_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_WPR_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_XVE_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_XVE_B_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_XVE_C_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_FEAT2_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_OPT_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_RECONFIG_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_PJTAG_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_PJTAG_SEC_PLM_OFFSET, 0xffffffff),
+	GU_OPTIONAL(GU_XP3G_PLM(0),          	0xffffffff),
+	GU_OPTIONAL(GU_XP3G_PLM(1),          	0xffffffff),
+	GU_OPTIONAL(GU_XP3G_PLM(2),          	0xffffffff),
+	GU_OPTIONAL(GU_XP3G_PLM(3),          	0xffffffff),
+	GU_OPTIONAL(GU_XVE_D_PLM(0),         	0xffffffff),
+	GU_OPTIONAL(GU_XVE_D_PLM(1),         	0xffffffff),
+	GU_OPTIONAL(GU_XVE_D_PLM(2),         	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xd0),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xd4),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xdc),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xe0),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xe4),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xe8),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xec),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xf0),  	0xffffffff),
+	GU_OPTIONAL(GU_OPT_BLOCK_PLM(0xf4),  	0xffffffff),
+	GU_OPTIONAL(GU_FEAT_ECC_PLM_OFFSET,  	0xffffffff),
+	GU_OPTIONAL(GU_MMU_LOCK_CFG_PLM_OFFSET,	0xffffffff),
+	GU_OPTIONAL(GU_WPR_PLM_C0_OFFSET,    	0xffffffff),
+	GU_OPTIONAL(GU_WPR_PLM_D0_OFFSET,    	0xffffffff),
+	GU_WRITE(GU_FBPA_CONFIG_PLM_OFFSET, 0xffffffff),
+	GU_WRITE(GU_FBPA_HBMPLL_PLM_OFFSET, 0xffffffff),
+	/* SM-RECONFIG, cmpunlocker sec2-postbl-plm-ss-cfg.patch. */
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(0), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(1), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(2), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(3), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(4), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(5), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(6), 0x000000ff),
+	GU_OPTIONAL(GU_SM_RECONFIG_OVR(7), 0x000000ff),
+	/* WPR1 must stay down for every following Booter launch. */
+	GU_WRITE(GU_WPR1_ADDR_HI_OFFSET, 0),
+	GU_WRITE(GU_WPR1_ADDR_LO_OFFSET, 0x1ffffe00),
 };
 
-/* Host side writes for speed unlocks */
-static const struct gu_reg_write selectors[] = {
-	{ GU_FEAT_SS0_OFFSET, GU_SS0_UNLOCK },
-	{ GU_FEAT_SS1_OFFSET, GU_SS1_UNLOCK },
+/* Fused defaults leave ECC disabled; only override them when EEN requests it.
+ * MASTER_EN is read-only; change only SIDEBAND_EN in FBPA_ECC_CONTROL.
+ * The three feature overrides and sideband setting must share a launch:
+ * restarting Booter between them fails its WPR range validation. */
+static const struct gu_reg_write ga100_ecc_enable[] = {
+	GU_WRITE_MASK(GU_FEAT_ECC_0_OFFSET, 0x999999, 0, 0x111111),
+	GU_WRITE_MASK(GU_FEAT_ECC_1_OFFSET, 0x3ffebf, 0, 0x155415),
+	GU_WRITE_MASK(GU_FEAT_ECC_2_OFFSET,      0xf, 0, 0x5),
+	GU_WRITE_MASK(GU_FBPA_ECC_CONTROL_OFFSET, 0x40, ~0x40u, 0x40),
+	GU_WRITE_MASK(GU_FBPA_HBM_CFG0_OFFSET,   0x200, ~0x200u, 0x200),
+	GU_WRITE_MASK(GU_DRAM_MODE_4_OFFSET,       0x3, ~0x3u, 0x3),
+	GU_WRITE_MASK(GU_FB_L2_ECC_CONFIG_OFFSET,  0x1, ~0x1u, 0x1),
+	GU_WRITE_MASK(GU_L2_DATA_CONFIG_OFFSET,    0x1, ~0x1u, 0x1),
+	GU_WRITE_MASK(GU_L2_INPUT_QUEUE_CONFIG_OFFSET, 0x1, ~0x1u, 0x1),
+	/* Post-ECO GA100 repurposes SM_TTU as the poison-disable signal.
+	 * Select its feature override and clear the inverted disable bit.
+	 * The old GLOBAL_POISON_DIS fuse is ineffective on these revisions. */
+	GU_WRITE_MASK(GU_FEAT_POISON_CONTROL_OFFSET, 0x02000000, ~0x03000000u, 0x03000000),
+	GU_WRITE(GU_NISO_SCRUB_PLM_OFFSET, 0xffffffff),
+};
+
+static const struct gu_ecc_recipe ga100_ecc = {
+	.carveout_reg = GU_INFOROM_CARVEOUT_OFFSET,
+	.min_subrevision = 1, /* GA100 A01P: poison ECO */
+	.enabled = GU_WRITE_TABLE(ga100_ecc_enable),
+};
+
+/* CMP 170HX memory geometry, cmpunlocker common/constants.yaml. The range
+ * register decodes to 32 << 31 = 64 GiB and 40 << 30 = 40 GiB. An FLR sets
+ * both back to stock, so the handover is without FLR. */
+static const struct gu_reg_write cmp170hx_8gb_geometry[] = {
+	GU_WRITE(GU_FBPA_CFG1_OFFSET, 0x02779000),
+	GU_WRITE(GU_LOCAL_MEMORY_RANGE_OFFSET, 0x0000020b),
+};
+static const struct gu_reg_write cmp170hx_10gb_geometry[] = {
+	GU_WRITE(GU_FBPA_CFG1_OFFSET, 0x02669000),
+	GU_WRITE(GU_LOCAL_MEMORY_RANGE_OFFSET, 0x0000028a),
+};
+
+/* Close temporary host permissions after the last dependent host write.
+ * All-ones PLMs legitimately look absent to the host, so locks are optional. */
+#define GU_HOST_LOCK_OPEN(plm) GU_OPTIONAL_RMW(plm, 0, ~GU_PLM_HOST_WRITE)
+
+/* Post-FLR values measured on CMP 170HX. WPR1 is restored by SEC2; WPR2
+ * is disabled by the last payload slot. These ranges use separate gates. */
+static const struct gu_reg_write ga100_handover[] = {
+	GU_OPTIONAL(GU_WPR_ADDR_HI_08_OFFSET,   0x00000000),
+	GU_OPTIONAL(GU_WPR_ADDR_LO_04_OFFSET,   0x1ffff000),
+	GU_OPTIONAL(GU_MMU_LOCK_ADDR_HI_OFFSET, 0x00000000),
+	GU_OPTIONAL(GU_MMU_LOCK_ADDR_LO_OFFSET, 0x1ffffff0),
+	GU_OPTIONAL(GU_WPR_CTL_0C_OFFSET,       0x00000028),
+	GU_HOST_LOCK_OPEN(GU_FBPA_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_XVE_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_OPT_BLOCK_PLM(0xd0)),
+	GU_HOST_LOCK_OPEN(GU_OPT_BLOCK_PLM(0xdc)),
+	GU_HOST_LOCK_OPEN(GU_WPR_PLM_C0_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_WPR_PLM_D0_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_MMU_LOCK_CFG_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_WPR_PLM_OFFSET),
+};
+static const struct gu_reg_write gddr_ecc_handover[] = {
+	GU_HOST_LOCK_OPEN(GU_DISPLAY_VPR_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_VPR_BOOT_HANDOFF_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_VPR_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_MEMORY_RANGE_MIRROR_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_GFW_FB_SIZE_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_MMU_LOCK_CFG_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_WPR_PLM_OFFSET),
+};
+static const struct gu_reg_write turing_ecc_handover[] = {
+	GU_HOST_LOCK_OPEN(GU_DISPLAY_VPR_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_VPR_BOOT_HANDOFF_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_MEMORY_RANGE_MIRROR_PLM_OFFSET),
+	GU_HOST_LOCK_OPEN(GU_TU102_MMU_PLM_OFFSET),
+};
+
+static const struct gu_ecc_recipe gddr_ecc = {
+	.carveout_reg = GU_INFOROM_CARVEOUT_OFFSET,
+	.prepare = GU_WRITE_TABLE(gddr_ecc_prepare),
+	.enabled = GU_WRITE_TABLE(gddr_ecc_enable),
+	.handover = GU_WRITE_TABLE(gddr_ecc_handover),
+};
+static const struct gu_ecc_recipe turing_ecc = {
+	.carveout_reg = GU_INFOROM_CARVEOUT_OFFSET,
+	.prepare = GU_WRITE_TABLE(turing_ecc_prepare),
+	.enabled = GU_WRITE_TABLE(gddr_ecc_enable),
+	.handover = GU_WRITE_TABLE(turing_ecc_handover),
+};
+
+/* cmpunlocker 2d10f891 bar1-resize-unlock.patch. These advertise BAR1 sizes
+ * up to 64 GiB and switch the decoder to 64 GiB at once, so gu_pcie_bar1_resize
+ * must follow them. */
+static const struct gu_reg_write ga100_bar1[] = {
+	GU_OPTIONAL(GU_XVE_BAR1_CYA_OFFSET,   0x00000030),
+	GU_OPTIONAL(GU_XVE_BAR1_REBAR_OFFSET, 0x8000000a),
+};
+
+/* PCIe Gen2 policy, cmpunlocker 2d10f891 pcie-gen2.patch as distilled by the
+ * driverless refire chain that confirmed LnkCap2 0x2 -> 0x6 on hardware.
+ * The stock driver's devinit reprograms the XVE strap shadows on every boot,
+ * so the policy is applied before the initial retrain and again from the
+ * relink path after devinit, immediately before the link retrain. Only the
+ * XP3G override registers take a host value; the OPT and
+ * XVE strap mirrors keep their fuse value (0x82057c reads 1, 0x8c1c0 bit 21
+ * reads 0), so every entry is optional and pcie.c judges the result by
+ * LnkCap2, not by these readbacks. */
+static const struct gu_reg_write ga100_relink[] = {
+	GU_OPTIONAL(GU_OPT_PCIE_GEN23_OFFSET,  0x00000000),
+	GU_OPTIONAL(GU_OPT_PCIE_MAGIC_OFFSET,  0x00200000),
+	GU_OPTIONAL(GU_XP3G_VAL(0),            0x00000000),
+	GU_OPTIONAL(GU_XP3G_OVR(0),            0x00000001),
+	GU_OPTIONAL(GU_XP3G_VAL(3),            0x00200000),
+	GU_OPTIONAL(GU_XP3G_OVR(3),            0x00000004),
+	GU_OPTIONAL_RMW(GU_XVE_VSEC_HIERARCHY_OFFSET, 0x00000001, ~0x1001u),
+	GU_OPTIONAL_RMW(GU_XVE_PRIV_MISC_1_OFFSET, (1u << 11) | (1u << 13),
+			~((1u << 11) | (1u << 12) | (1u << 13) | (1u << 14))),
+	GU_OPTIONAL_RMW(GU_XP_CYA_0_OFFSET,         0x00000000, ~(1u << 2)),
+	GU_OPTIONAL_RMW(GU_XP_LINK_CONFIG_0_OFFSET, 2u << 18,   ~(3u << 18)),
+	GU_OPTIONAL(GU_XP_PL_LINK_RATE_OFFSET,      0x00240036),
+	GU_OPTIONAL_RMW(GU_XVE_LINK_CTRL_2_OFFSET,  0x00000002, ~0x0fu),
+	GU_OPTIONAL(GU_XVE_OVERRIDE_OFFSET,         0x00000006),
 };
 
 static const struct gu_booter sec2_ga100 = {
 	.file = GU_FW_BOOTER_GA100,
 	.launch = GU_SEC2_DIRECT,
-	.payload = &ga100_v67,
+	.payload = &ga100_payload,
 	.expect = {
 		.image_size = 60160,
 		.num_sigs = 1,
@@ -312,7 +492,7 @@ static const struct gu_booter sec2_ga100 = {
 static const struct gu_booter sec2_ga102 = {
 	.file = GU_FW_BOOTER_GA102,
 	.launch = GU_SEC2_HS,
-	.payload = &ga102_v67,
+	.payload = &ga102_payload,
 	.expect = {
 		.image_size = 60416,
 		.num_sigs = 2,
@@ -327,7 +507,7 @@ static const struct gu_booter sec2_ga102 = {
 static const struct gu_booter sec2_ad102 = {
 	.file = GU_FW_BOOTER_AD102,
 	.launch = GU_SEC2_HS,
-	.payload = &ad102_v67,
+	.payload = &ad102_payload,
 	.expect = {
 		.image_size = 0xde00,
 		.num_sigs = 2,
@@ -339,17 +519,10 @@ static const struct gu_booter sec2_ad102 = {
 		.ucode_id = 3,
 	},
 };
-/* 610.43.03 ships a TU116 load image beside the TU10x one, and it is the same
- * record with the die's own material: 58880 B image where tu10x has 59136, its
- * own 16 B production signature, and its signature patch at 0x8600 where tu10x
- * has 0x8700 (extract_boot_assets.py decodes the archive into the bundle this
- * describes, so the numbers below are read from the driver, not copied). The
- * GspRmBoot and SEC2 BL images have no TU116 variant in the driver at all, so
- * the tu102 files serve this family too. */
 static const struct gu_booter sec2_tu102 = {
 	.file = GU_FW_BOOTER_TU102,
 	.launch = GU_SEC2_DIRECT,
-	.payload = &tu102_v67,
+	.payload = &tu102_payload,
 	.expect = {
 		.image_size = 59136,
 		.num_sigs = 1,
@@ -358,21 +531,6 @@ static const struct gu_booter sec2_tu102 = {
 		.os_data_size = 25088,
 		.app_code_size = 33792,
 		.patch_loc = 34560,
-		.ucode_id = 13,
-	},
-};
-static const struct gu_booter sec2_tu116 = {
-	.file = GU_FW_BOOTER_TU116,
-	.launch = GU_SEC2_DIRECT,
-	.payload = &tu116_v67,
-	.expect = {
-		.image_size = 58880,
-		.num_sigs = 1,
-		.sig_bytes = 16,
-		.os_data_off = 33792,
-		.os_data_size = 25088,
-		.app_code_size = 33536,
-		.patch_loc = 34304,
 		.ucode_id = 13,
 	},
 };
@@ -406,135 +564,178 @@ static const struct gu_fw_desc tu102_fw = {
 	.boot_size = 4096,
 };
 
+/* Per-GPC OPT_TPC_GPC disable and defective masks. GA10x uses the first seven
+ * GA100 entries. */
+static const u32 tu102_tpc_disable[] = {
+	0x21760, 0x21764, 0x21768, 0x2176c, 0x21770, 0x21774,
+};
+static const u32 tu102_tpc_defect[] = {
+	0x215c8, 0x21508, 0x2150c, 0x21514, 0x21564, 0x215ac,
+};
+static const u32 ga100_tpc_disable[] = {
+	0x820760, 0x820764, 0x820768, 0x82076c, 0x820770, 0x820774, 0x820778, 0x82077c,
+};
+static const u32 ga100_tpc_defect[] = {
+	0x8205c8, 0x820508, 0x82050c, 0x820514, 0x820564, 0x8205ac, 0x820b84, 0x820b80,
+};
+static const u32 ad102_tpc_disable[] = {
+	0x820760, 0x820764, 0x820768, 0x82076c, 0x820770, 0x820774, 0x820778, 0x82077c,
+	0x820780, 0x820784, 0x820ba0, 0x820ba4,
+};
+static const u32 ad102_tpc_defect[] = {
+	0x8205c8, 0x820508, 0x82050c, 0x820514, 0x820564, 0x8205ac, 0x820b84, 0x8210a0,
+	0x8210a4, 0x8210a8, 0x8210ac, 0x8210b0,
+};
+
+static const struct gu_fuse_layout tu102_fuse = {
+	.base = 0x21000, .addr_bits = 8, .tpc_bits = 6, .gpcs = 6,
+	.tpc_disable = tu102_tpc_disable, .tpc_defect = tu102_tpc_defect,
+};
+static const struct gu_fuse_layout ga100_fuse = {
+	.base = 0x820000, .addr_bits = 9, .tpc_bits = 8, .gpcs = 8, .ampere = true,
+	.tpc_disable = ga100_tpc_disable, .tpc_defect = ga100_tpc_defect,
+};
+static const struct gu_fuse_layout ga10x_fuse = {
+	.base = 0x820000, .addr_bits = 10, .tpc_bits = 6, .gpcs = 7, .ampere = true,
+	.tpc_disable = ga100_tpc_disable, .tpc_defect = ga100_tpc_defect,
+};
+static const struct gu_fuse_layout ad10x_fuse = {
+	.base = 0x820000, .addr_bits = 10, .tpc_bits = 6, .gpcs = 12, .ampere = true,
+	.tpc_disable = ad102_tpc_disable, .tpc_defect = ad102_tpc_defect,
+};
+
 static const struct gu_family ga100 = {
+	.ecc = &ga100_ecc,
 	.name = "GA100",
-	.privileged = GU_WRITE_TABLE(ga100_plm),
-	.host = GU_WRITE_TABLE(selectors),
+	.memory = GU_MEMORY_RANGE,
+	.vram = GU_VRAM_HBM,
+	.fuse = &ga100_fuse,
+	.selectors = GU_WRITE_TABLE(ampere_selectors),
+	.privileged = GU_WRITE_TABLE(ga100_privileged),
+	.rom = { .ecc = true, .p8_min_mhz = 135, .gpc_offset_mhz = 1000, .min_subrevision = 1 },
+	.p2p = true,
+	.relink = GU_WRITE_TABLE(ga100_relink),
+	.bar1 = GU_WRITE_TABLE(ga100_bar1),
+	.handover = GU_WRITE_TABLE(ga100_handover),
+	.link_speed = 2,
 	.fw = &ga100_fw,
 	.booter = &sec2_ga100,
 	.loader = GU_FW_LOADER,
 	.fwsec_version = 2,
-	.feat_plm = GU_FEAT_PLM_OFFSET,
-	.feat_ss0 = GU_FEAT_SS0_OFFSET,
-	.feat_ss1 = GU_FEAT_SS1_OFFSET,
+	.frts = false,
+	.feat = &ampere_features,
+	.scrub_via_dmactl = true,
+};
+/* A100 needs only host access for the existing HBM governor. */
+static const struct gu_family ga100_hbm = {
+	.name = "A100 80GB PCIe",
+	.rom = { .p8_min_mhz = 135, .gpc_offset_mhz = 1000 },
+	.memory = GU_MEMORY_RANGE,
+	.vram = GU_VRAM_HBM,
+	.fuse = &ga100_fuse,
+	.privileged = GU_WRITE_TABLE(ga100_hbm_access),
+	.fw = &ga100_fw,
+	.booter = &sec2_ga100,
+	.loader = GU_FW_LOADER,
+	.fwsec_version = 2,
+	.feat = &ampere_features,
+	.scrub_via_dmactl = true,
 };
 static const struct gu_family ga10x = {
+	.memory = GU_MEMORY_GDDR,
+	.pmu_riscv = true,
+	.ecc = &gddr_ecc,
+	.rom = { .ecc = true },
 	.name = "GA102/GA103/GA104/GA106",
-	.privileged = GU_WRITE_TABLE(ga10x_plm),
-	.host = GU_WRITE_TABLE(selectors),
+	.vram = GU_VRAM_GDDR,
+	.fuse = &ga10x_fuse,
+	.selectors = GU_WRITE_TABLE(ampere_selectors),
+	.p2p = true,
 	.fw = &ga10x_fw,
 	.booter = &sec2_ga102,
 	.loader = NULL,
 	.fwsec_version = 3,
-	.feat_plm = GU_FEAT_PLM_OFFSET,
-	.feat_ss0 = GU_FEAT_SS0_OFFSET,
-	.feat_ss1 = GU_FEAT_SS1_OFFSET,
-	.direct_selectors = true,
+	.frts = true,
+	.feat = &ampere_features,
 };
 static const struct gu_family ad10x = {
+	.memory = GU_MEMORY_GDDR,
+	.pmu_riscv = true,
+	.ecc = &gddr_ecc,
+	.rom = { .ecc = true },
 	.name = "AD102/AD103/AD104/AD106/AD107",
-	.privileged = GU_WRITE_TABLE(ad102_plm),
-	.host = GU_WRITE_TABLE(selectors),
+	.vram = GU_VRAM_GDDR,
+	.fuse = &ad10x_fuse,
+	.selectors = GU_WRITE_TABLE(ampere_selectors),
+	.p2p = true,
 	.fw = &ad102_fw,
 	.booter = &sec2_ad102,
 	.loader = NULL,
 	.fwsec_version = 3,
-	.feat_plm = GU_FEAT_PLM_OFFSET,
-	.feat_ss0 = GU_FEAT_SS0_OFFSET,
-	.feat_ss1 = GU_FEAT_SS1_OFFSET,
+	.frts = true,
+	.feat = &ampere_features,
 };
 static const struct gu_family tu102 = {
+	.ecc = &turing_ecc,
+	.rom = { .ecc = true },
 	.name = "TU102/TU104/TU106",
-	.privileged = GU_WRITE_TABLE(tu102_plm),
-	.host = GU_WRITE_TABLE(tu102_selectors),
+	.vram = GU_VRAM_GDDR,
+	.fuse = &tu102_fuse,
+	.selectors = GU_WRITE_TABLE(turing_selectors),
 	.fw = &tu102_fw,
 	.booter = &sec2_tu102,
 	.loader = GU_FW_SEC2_BL_TU102,
 	.fwsec_version = 2,
-	.feat_plm = GU_TU102_FEAT_PLM_OFFSET,
-	.feat_ss0 = GU_TU102_FEAT_SS0_OFFSET,
-	.feat_ss1 = GU_TU102_FEAT_SS1_OFFSET,
-	.turing_layout = true,
-};
-/* TU116 takes the TU10x chain verbatim apart from the Booter image and the park
- * word above, and its FWSEC side measures the same generation: the v2 loader
- * halts and WPR2 comes up at the FRTS page. What the tu10x image cannot do on
- * this die is run: on a GTX 1660 SUPER it stops in the nonsecure stub
- * (MAILBOX0 0x31) and the first privileged write fails with -EIO, which is the
- * park word above. With this Booter and payload the same card runs to the end,
- * host side and inside a guest: MAILBOX0 0x9, both privileged writes applied and
- * read back (FEAT_PLM 0xffffffff, WPR2_ADDR_HI 0), SS0/SS1 at the unlocked
- * values, a clean handoff. The stock driver then refuses the card:
- * _kgspBootGspRm reports "unexpected WPR2 already up, cannot proceed with
- * booting GSP", RmInitAdapter fails, and the GPU stays unusable until it loses
- * power. The driver's gate is the very register this transaction clears and
- * reads back as 0 (_kgspBootGspRm tests NV_PFB_PRI_MMU_WPR2_ADDR_HI != 0, and
- * the only exemption is a per-chip property no dGPU carries), so on this die
- * something raises WPR2 again between the handoff and the driver's read. The
- * Booter's terminal MAILBOX0 0x9 belongs to the 0x9x WPR-window family of
- * nv-uefi-unlocker's status dictionary, so the geometry the TU116 secure stage
- * validates is the suspect, and the family needs work of its own there. That
- * geometry is the blocker from both sides, measured: the stock GSP boot raises
- * the register this transaction clears back to its stock 0x17fee00, which is
- * what the driver's gate then reads, and a run that never clears it (the direct
- * selectors path, one signed Booter launch, SS0/SS1 applied, PLMs left alone)
- * lands the selectors and then fails this module's own post-FLR WPR2 check with
- * -EBUSY, retaining the card. The driver's minor is not the variable: the same
- * transaction on the same card under 610.43.03 runs the identical chain (measured
- * 2026-11-22 over the 580.178.04 that showed it first) - kflcnWaitForHalt_TU102
- * times out, Booter Load reports status 0x65 with MAILBOX0 0x31, the gate then
- * refuses - while a TU104 unlocked in the same boot reaches 64.97 TFLOPS FP16 on
- * that same driver build. nv-uefi-unlocker's TU117 record ends at the same
- * refusal on 580.178.04, so the 16 series refuses as a family, from the pre-boot
- * and the in-kernel path alike. Until it exists cards[] carries no TU116() line,
- * as GA100 carries none: the transaction would report success and leave an inert
- * card. The die has no tensor cores either, so no GEMM uplift could measure the
- * difference even once it works. */
-static const struct gu_family tu116 = {
-	.name = "TU116",
-	.privileged = GU_WRITE_TABLE(tu102_plm),
-	.host = GU_WRITE_TABLE(tu102_selectors),
-	.fw = &tu102_fw,
-	.booter = &sec2_tu116,
-	.loader = GU_FW_SEC2_BL_TU102,
-	.fwsec_version = 2,
-	.feat_plm = GU_TU102_FEAT_PLM_OFFSET,
-	.feat_ss0 = GU_TU102_FEAT_SS0_OFFSET,
-	.feat_ss1 = GU_TU102_FEAT_SS1_OFFSET,
-	.turing_layout = true,
+	.frts = true,
+	.feat = &turing_features,
+	.memory = GU_MEMORY_RANGE,
+	.scrub_via_dmactl = true,
 };
 
-#define AD102(id) { id, 0x192, &ad10x }
-#define AD103(id) { id, 0x193, &ad10x }
-#define AD104(id) { id, 0x194, &ad10x }
-#define AD106(id) { id, 0x196, &ad10x }
-#define AD107(id) { id, 0x197, &ad10x }
+#define AD102(id) { .device = id, .chip = 0x192, .family = &ad10x }
+#define AD103(id) { .device = id, .chip = 0x193, .family = &ad10x }
+#define AD104(id) { .device = id, .chip = 0x194, .family = &ad10x }
+#define AD106(id) { .device = id, .chip = 0x196, .family = &ad10x }
+#define AD107(id) { .device = id, .chip = 0x197, .family = &ad10x }
 
-#define TU102(id) { id, 0x162, &tu102 }
-#define TU104(id) { id, 0x164, &tu102 }
-#define TU106(id) { id, 0x166, &tu102 }
-#define TU116(id) { id, 0x168, &tu116 }
+#define TU102(id) { .device = id, .chip = 0x162, .family = &tu102 }
+#define TU104(id) { .device = id, .chip = 0x164, .family = &tu102 }
+#define TU106(id) { .device = id, .chip = 0x166, .family = &tu102 }
 
-#define GA100(id) { id, 0x170, &ga100 }
-#define GA102(id) { id, 0x172, &ga10x }
-#define GA103(id) { id, 0x173, &ga10x }
-#define GA104(id) { id, 0x174, &ga10x }
-#define GA106(id) { id, 0x176, &ga10x }
-#define GA107(id) { id, 0x177, &ga10x }
+#define GA100(id, config, max_mw) \
+	{ .device = id, .chip = 0x170, .family = &ga100, .privileged = GU_WRITE_TABLE(config), \
+	  .power_max_mw = max_mw }
+#define GA102(id) { .device = id, .chip = 0x172, .family = &ga10x }
+#define GA103(id) { .device = id, .chip = 0x173, .family = &ga10x }
+#define GA104(id) { .device = id, .chip = 0x174, .family = &ga10x }
+#define GA106(id) { .device = id, .chip = 0x176, .family = &ga10x }
+#define GA107(id) { .device = id, .chip = 0x177, .family = &ga10x }
 
 static const struct gu_card cards[] = {
+	/* A laptop SKU of a die that is already here needs one line and no new
+	 * material: it runs on the family's Booter, payload and GSP image. The
+	 * mobile ids below come from the success reports (TU106BM 0x1f50, GA107
+	 * 0x25a2, 0x25ac, 0x25ad, 0x25ed, AD103M 0x2717, AD104M 0x27e0, AD107M
+	 * 0x28a1) and from the pre-boot project's measured device matrix
+	 * (TU104M 0x1e93, TU104BM 0x1ed1, TU106M 0x1f14 and 0x1f15, GA107BM
+	 * 0x25e2). Each is pinned with its chip in the host test. */
+	/* GA100: CMP 170HX 8GB, CMP 170HX 10GB */
+	GA100(0x20c2, cmp170hx_8gb_geometry, 0), GA100(0x2082, cmp170hx_10gb_geometry, 300000),
+	
+	{ .device = 0x20b5, .chip = 0x170, .family = &ga100_hbm, .power_min_mw = 100000 },
+
 	/* TU102: RTX 2080 Ti, Titan RTX */
 	TU102(0x1e03), TU102(0x1e04), TU102(0x1e07), TU102(0x1e2d),
 	TU102(0x1e2e),
 
 	/* TU104: RTX 2080 SUPER, RTX 2070 SUPER, RTX 2080, RTX 2070,
-	 * RTX 2080 SUPER Max-Q, RTX 2070 SUPER Laptop */
+	 * RTX 2080 SUPER Laptop, RTX 2070 SUPER Laptop */
 	TU104(0x1e81), TU104(0x1e82), TU104(0x1e84), TU104(0x1e87),
 	TU104(0x1e89), TU104(0x1e93), TU104(0x1ec2), TU104(0x1ec7),
 	TU104(0x1ed1),
 
 	/* TU106: RTX 2070, RTX 2060 SUPER, RTX 2060, RTX 2070 Laptop,
-	 * RTX 2060 Laptop */
+	 * RTX 2070 Laptop (refresh), RTX 2060 Laptop */
 	TU106(0x1f02), TU106(0x1f03), TU106(0x1f06), TU106(0x1f07),
 	TU106(0x1f08), TU106(0x1f14), TU106(0x1f15), TU106(0x1f42),
 	TU106(0x1f47), TU106(0x1f50),
@@ -550,12 +751,11 @@ static const struct gu_card cards[] = {
 	/* AD104: RTX 4070 Ti, RTX 4070 SUPER, RTX 4070, RTX 4080 Laptop */
 	AD104(0x2782), AD104(0x2783), AD104(0x2786), AD104(0x27e0),
 
-	/* AD106: RTX 4060 Ti, RTX 4060 Ti 16GB, RTX 4070 Laptop */
+	/* AD106: RTX 4060 Ti, RTX 4060 Ti 16GB, RTX 4070 Laptop, RTX 4070 */
 	AD106(0x2803), AD106(0x2805), AD106(0x2820), AD106(0x2860),
 
 	/* AD107: RTX 4060, RTX 4060 Laptop, RTX 4060 Mobile, RTX 4050 Mobile */
-	AD107(0x2882), AD107(0x28a0), AD107(0x28a1), AD107(0x28e0),
-	AD107(0x28e1),
+	AD107(0x2882), AD107(0x28a0), AD107(0x28a1), AD107(0x28e0), AD107(0x28e1),
 
 	GA102(0x2200), GA102(0x2203), GA102(0x2204), GA102(0x2205),
 	GA102(0x2206), GA102(0x2207), GA102(0x2208), GA102(0x220a),
@@ -587,4 +787,68 @@ const struct gu_card *gu_card_find(u16 device)
 		if (cards[i].device == device)
 			return &cards[i];
 	return NULL;
+}
+
+int gu_recipe_prepare(const struct gu_card *card, bool ecc_enabled,
+		      struct gu_reg_write **writes, size_t *count)
+{
+	const struct gu_family *family = card->family;
+	const struct gu_ecc_recipe *ecc = family->ecc;
+	const struct gu_write_table tables[] = {
+		family->selectors,
+		family->privileged,
+		{ .entries = p2p_privileged,
+		  .count = family->p2p ? ARRAY_SIZE(p2p_privileged) : 0 },
+		ecc_enabled && ecc ? ecc->prepare : (struct gu_write_table) { },
+	};
+	struct gu_reg_write *prepared;
+	size_t prefix = 0, enable_count, total, used = 0, i;
+	size_t slots = family->booter->payload->writes;
+
+	*writes = NULL;
+	*count = 0;
+	if ((ecc_enabled && !ecc) || slots < 2 || slots > GU_PAYLOAD_MAX_WRITES)
+		return -EINVAL;
+	/* The executor owns the last slot for WPR2 restoration. */
+	slots--;
+	for (i = 0; i < ARRAY_SIZE(tables); i++)
+		prefix += tables[i].count;
+	enable_count = ecc_enabled ? ecc->enabled.count : 0;
+	/* Keep dependent ECC mode writes together on a fresh launch. */
+	if (enable_count)
+		prefix = roundup(prefix, slots);
+	total = prefix + enable_count + card->privileged.count;
+	/* A geometry suffix must fit entirely in the last invocation. */
+	if (card->privileged.count &&
+	    (prefix + enable_count) % slots + card->privileged.count > slots)
+		return -EINVAL;
+	prepared = kcalloc(total, sizeof(*prepared), GFP_KERNEL);
+	if (!prepared)
+		return -ENOMEM;
+	for (i = 0; i < ARRAY_SIZE(tables); i++) {
+		if (tables[i].count)
+			memcpy(prepared + used, tables[i].entries,
+			       tables[i].count * sizeof(*prepared));
+		used += tables[i].count;
+	}
+	while (used < prefix) {
+		prepared[used] = prepared[used - 1];
+		used++;
+	}
+	if (enable_count) {
+		memcpy(prepared + prefix, ecc->enabled.entries,
+		       enable_count * sizeof(*prepared));
+		/* The common GDDR block starts with the feature override, whose
+		 * address moved from FECS to FUSE after Turing. */
+		if (family->vram == GU_VRAM_GDDR)
+			prepared[prefix].addr = family->feat->ecc;
+	}
+	/* Geometry changes invalidate the old Booter metadata. They must be
+	 * last, including when ECC needs several launches before them. */
+	if (card->privileged.count)
+		memcpy(prepared + prefix + enable_count, card->privileged.entries,
+		       card->privileged.count * sizeof(*prepared));
+	*writes = prepared;
+	*count = total;
+	return 0;
 }

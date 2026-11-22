@@ -10,14 +10,14 @@
 #include <string.h>
 
 #include "../kernel/gpu_unlock/gfw_eval.h"
-#include "../kernel/gpu_unlock/layout_610.h"
+#include "../kernel/gpu_unlock/layout.h"
 #include "../kernel/gpu_unlock/payload.h"
-#include "../kernel/gpu_unlock/prep_610.h"
+#include "../kernel/gpu_unlock/prep.h"
 #include "../kernel/gpu_unlock/recipes.h"
 #include "../kernel/gpu_unlock/registers.h"
 
 /* The bundle magic of the generated Booter files; BOOTER_MAGIC lives in the
- * kernel-only firmware_610.c. */
+ * kernel-only firmware.c. */
 #define BOOTER_MAGIC 0x314c5442u
 
 static u32 rd32_le(const u8 *p)
@@ -103,20 +103,19 @@ static void test_layout_and_prep(void)
 	assert(gpu_unlock_fuse_version(7) == 3);
 }
 
-/* TU10x is the family whose table is shorter than its payload's slots, so its
- * last batch is padded by repeating the last write: the table has to end on a
- * store a padded launch can safely reapply. Pin the whole shape, including the
- * table order, so a reordering that ends on the FEAT PLM write (which a padded
- * launch would reopen on the next card of a batch) fails here instead of on
- * hardware, and pin the Booter geometry the payload's gadget offsets were
- * derived against.
+/* Turing is the family that writes its selectors from the Booter, at level 3
+ * and with no FEAT permission opened for the host, and whose payload reserves
+ * the last of its six slots for the WPR2 restore. Pin the selector pair, the
+ * Booter geometry the payload's gadget offsets were derived against, and the
+ * DMACTL scrub report, so a change to any of them fails here and not on
+ * hardware.
  */
-static void test_turing_two_write(void)
+static void test_turing_chain(void)
 {
 	const struct gu_card *card = gu_card_find(0x1e84); /* RTX 2070 SUPER */
 	const struct gu_family *family;
 	const struct gu_payload *p;
-	const struct gu_reg_write *plm;
+	const struct gu_booter_expect *expect;
 	struct gu_reg_write batch[GU_PAYLOAD_MAX_WRITES];
 	size_t i;
 	u8 *buf;
@@ -124,34 +123,42 @@ static void test_turing_two_write(void)
 	assert(card != NULL);
 	family = card->family;
 	assert(strcmp(family->name, "TU102/TU104/TU106") == 0);
+	assert(family->scrub_via_dmactl);
+	assert(!family->p2p);
+	assert(family->feat->plm == GU_TU102_FEAT_PLM_OFFSET);
+	assert(family->booter->launch == GU_SEC2_DIRECT);
 	p = family->booter->payload;
-	assert(strcmp(p->name, "tu102-v67-2w") == 0);
-	assert(p->writes == 2);
+	expect = &family->booter->expect;
+	assert(strcmp(p->name, "tu102") == 0);
+	assert(p->writes == 6);
 	assert(p->completion == GU_PAYLOAD_HALT_RESET_PLM_ZERO);
-	assert(family->booter->expect.image_size == 59136);
-	assert(family->booter->expect.num_sigs == 1);
-	assert(family->booter->expect.sig_bytes == 16);
-	assert(family->booter->expect.ucode_id == 13);
+	assert(expect->image_size == 59136);
+	assert(expect->num_sigs == 1);
+	assert(expect->sig_bytes == 16);
+	assert(expect->ucode_id == 13);
+	assert(expect->os_data_off == 34048);
+	assert(expect->os_data_size == 25088);
+	assert(expect->app_code_size == 33792);
+	assert(expect->patch_loc == 34560);
 
-	plm = family->privileged.entries;
-	assert(family->privileged.count == 2);
-	assert(plm[0].addr == GU_TU102_FEAT_PLM_OFFSET && plm[0].value == 0xffffffff);
-	assert(plm[1].addr == GU_WPR2_ADDR_HI_OFFSET && plm[1].value == 0);
-	assert(family->host.count == 2);
-	assert(family->host.entries[0].addr == GU_TU102_FEAT_SS0_OFFSET);
-	assert(family->host.entries[0].value == GU_SS0_UNLOCK);
-	assert(family->host.entries[1].addr == GU_TU102_FEAT_SS1_OFFSET);
-	assert(family->host.entries[1].value == GU_SS1_UNLOCK);
+	assert(family->selectors.count == 2);
+	assert(family->selectors.entries[0].addr == GU_TU102_FEAT_SS0_OFFSET);
+	assert(family->selectors.entries[0].value == GU_SS0_UNLOCK);
+	assert(family->selectors.entries[1].addr == GU_TU102_FEAT_SS1_OFFSET);
+	assert(family->selectors.entries[1].value == GU_SS1_UNLOCK);
 
-	for (i = 0; i < family->privileged.count; i++)
-		batch[i] = plm[i];
+	assert(family->privileged.count + family->selectors.count <= p->writes - 1);
+	for (i = 0; i < family->selectors.count; i++)
+		batch[i] = family->selectors.entries[i];
 	buf = calloc(1, p->size);
 	assert(buf != NULL);
-	assert(gu_payload_build(p, buf, batch, family->privileged.count) == 0);
-	for (i = family->privileged.count; i < p->writes; i++) {
-		assert(rd32_le(buf + p->slots[i].address_off) == plm[1].addr);
-		assert(rd32_le(buf + p->slots[i].value_off) == plm[1].value);
+	assert(gu_payload_build(p, buf, batch, family->selectors.count) == 0);
+	for (i = 0; i < family->selectors.count; i++) {
+		assert(rd32_le(buf + p->slots[i].address_off) == batch[i].addr);
+		assert(rd32_le(buf + p->slots[i].value_off) == batch[i].value);
 	}
+	/* The last slot is the executor's: nothing in the table may reach it. */
+	assert(rd32_le(buf + p->slots[p->writes - 1].address_off) == 0);
 	free(buf);
 }
 
@@ -218,11 +225,11 @@ static void test_recipes_and_payloads(void)
 		assert(p != NULL);
 		assert(gu_payload_check(p) == 0);
 
-		n = card->family->privileged.count;
-		if (n > p->writes)
-			n = p->writes;
+		n = card->family->selectors.count;
+		if (n > p->writes - 1)
+			n = p->writes - 1;
 		for (j = 0; j < n; j++)
-			batch[j] = card->family->privileged.entries[j];
+			batch[j] = card->family->selectors.entries[j];
 
 		buf = calloc(1, p->size);
 		assert(buf != NULL);
@@ -364,7 +371,7 @@ int main(int argc, char **argv)
 	test_gfw_eval();
 	test_layout_and_prep();
 	test_recipes_and_payloads();
-	test_turing_two_write();
+	test_turing_chain();
 	if (argc > 1)
 		test_extracted_assets(argv[1]);
 	printf("unit_test: all checks passed\n");

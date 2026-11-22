@@ -1,7 +1,7 @@
 %global nvver 610.43.03
 
 Name: gpu-unlock
-Version: 2.5.0
+Version: 3.0.0
 Release: 1%{?dist}
 Summary: GeForce BF16 unlock before the NVIDIA driver loads
 License: GPL-2.0-only
@@ -24,6 +24,7 @@ NVIDIA driver binds, opted in on the kernel command line.
 %package dkms
 Summary: GeForce BF16 unlock kernel source
 Requires: dkms
+Requires: kmod
 Requires(post): dkms
 Requires(preun): dkms
 Requires: gpu-unlock-firmware = %{version}-%{release}
@@ -58,7 +59,13 @@ make DESTDIR=%{buildroot} ASSETS="$PWD/assets" \
 %license licenses/GPL-2.0.txt licenses/CMP40HX-MIT.txt licenses/NVIDIA-MIT.txt
 %doc %{_datadir}/doc/gpu-unlock
 %{_usrsrc}/gpu-unlock-%{version}
-%{_prefix}/lib/dracut/dracut.conf.d/00-gpu-unlock.conf
+%{_prefix}/lib/dracut/dracut.conf.d/gpu-unlock.conf
+%{_prefix}/lib/dracut/modules.d/91gpu-unlock-overrides
+%{_prefix}/lib/gpu-unlock
+%{_prefix}/lib/modprobe.d/gpu-unlock.conf
+%{_prefix}/lib/systemd/system/gpu-unlock-overrides.service
+%{_prefix}/lib/systemd/system/sysinit.target.wants/gpu-unlock-overrides.service
+%{_prefix}/lib/firmware/nvidia/gpu-unlock
 
 %files firmware
 %defattr(0644,root,root,0755)
@@ -113,6 +120,7 @@ fi
 
 %postun dkms
 if [ "$1" -eq 0 ]; then
+    rm -f /run/modprobe.d/gpu-unlock-ecc.conf
     # A kernel package's weak-modules run can still have linked another
     # kernel's build into its weak-updates; such a link now dangles and
     # makes dracut fail for that kernel.
@@ -134,6 +142,17 @@ if [ "$1" -eq 0 ]; then
 fi
 
 %changelog
+* Sun Nov 22 2026 Zagitta <zetlon+github@gmail.com> - 3.0.0-1
+- Merge the upstream 3.0.0-beta line: CMP 170HX compute, PCIe Gen2, BAR1 and
+  peer-to-peer support, ECC and VBIOS registry overrides delivered before the
+  driver binds, GDDR and HBM temperatures over hwmon, an HBM clock governor,
+  the GA100 and A100 power and core-clock ranges, unlocks restored at device
+  resume, and release snapshots restricted to an explicit file list.
+- Load gpu_unlock ahead of nvidia with a modprobe softdep in every initramfs,
+  which replaces the load-order drop-in naming and the init-premount script.
+- Carry the reported laptop SKUs on their family's existing assets: the TU104,
+  TU106, GA103, GA106, GA107, AD103, AD104, AD106 and AD107 mobile ids.
+
 * Tue Nov 17 2026 Zagitta <zetlon+github@gmail.com> - 2.5.0-1
 - Carry the laptop SKUs the field measured, one table line each and on their
   family's existing assets: the success reports' TU106BM 0x1f50, GA107
